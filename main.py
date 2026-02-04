@@ -1,8 +1,7 @@
 import numpy as np
-from database.vector_database import VectorDatabase
+from database.ivf_database import IVFVectorDatabase
 from config.database import engine, SessionLocal
 from database.schema import Base
-from utils.clustering import KMeans
 import time
 
 # Create tables
@@ -12,16 +11,18 @@ def main():
     # Create database session
     db = SessionLocal()
     
-    # Create vector database instance
-    vector_db = VectorDatabase(db)
+    # Create IVF vector database instance
+    vector_db = IVFVectorDatabase(db)
     
-    print("Vector Database initialized!")
+    print("IVF Vector Database initialized!")
     print("Available operations:")
     print("1. Insert vectors")
     print("2. Insert vector batch")
-    print("3. Create index")
-    print("4. Search vectors (indexed)")
-    print("5. Get index information")
+    print("3. Create IVF index")
+    print("4. Load IVF index")
+    print("5. Search vectors (IVF)")
+    print("6. Compare search methods")
+    print("7. Get database stats")
     
     # Example usage
     print("\n=== Example Usage ===")
@@ -31,7 +32,7 @@ def main():
     
     # Create sample vectors with metadata
     vectors_data = []
-    for i in range(50):  # More vectors for better clustering
+    for i in range(100):  # More vectors for better clustering
         vector = np.random.rand(128).tolist()
         metadata = {
             "id": i,
@@ -60,73 +61,73 @@ def main():
     else:
         print(f"Batch insertion failed: {batch_result['message']}")
     
-    # Create index
-    print("\nCreating index...")
-    index_result = vector_db.create_index(k=10)  # 10 clusters
+    # Create IVF index
+    print("\nCreating IVF index...")
+    index_result = vector_db.create_ivf_index(n_clusters=10, n_probes=5)
     
     if index_result["success"]:
-        print(f"Index created successfully!")
-        print(f"Total clusters: {index_result['cluster_info']['total_clusters']}")
-        print(f"Cluster sizes: {index_result['cluster_info']['cluster_sizes']}")
+        print(f"IVF Index created successfully!")
+        print(f"Stats: {index_result['stats']}")
     else:
-        print(f"Index creation failed: {index_result['message']}")
+        print(f"IVF Index creation failed: {index_result['message']}")
     
-    # Search for a query vector using indexed approach
-    print("\nSearching for similar vectors (indexed)...")
+    # Search for a query vector using IVF
+    print("\nSearching for similar vectors (IVF)...")
     query_vector = np.random.rand(128).tolist()
     
     start_time = time.time()
-    search_result = vector_db.search(
-        query_vector, 
-        k=5, 
-        use_index=True,
-        n_probes=5
-    )
+    search_result = vector_db.search(query_vector, k=5, use_ivf=True, use_rerank=True)
     end_time = time.time()
     
     if search_result['success']:
-        print(f"Found {search_result['total_results']} similar vectors using indexed search")
+        print(f"Found {search_result['total_results']} similar vectors using IVF search")
         print(f"Search time: {end_time - start_time:.4f} seconds")
         print(f"Method used: {search_result['method']}")
         for i, result in enumerate(search_result['results']):
             print(f"  {i+1}. Distance: {result['distance']:.4f}")
             print(f"     Vector ID: {result['vector_id']}")
-            if 'metadata' in result:
-                print(f"     Metadata: {result['metadata']}")
+            if 'metadata' in result and result['metadata']:
+                print(f"     Category: {result['metadata'].get('category', 'N/A')}")
     else:
         print(f"Search failed: {search_result['message']}")
     
-    # Search using brute force for comparison
-    print("\nSearching for similar vectors (brute force)...")
-    start_time = time.time()
-    brute_force_result = vector_db.search(
-        query_vector, 
-        k=5, 
-        use_index=False
-    )
-    end_time = time.time()
+    # Compare search methods
+    print("\nComparing search methods...")
+    comparison_result = vector_db.compare_search_methods(query_vector, k=5)
     
-    if brute_force_result['success']:
-        print(f"Found {brute_force_result['total_results']} similar vectors using brute force")
-        print(f"Search time: {end_time - start_time:.4f} seconds")
-        for i, result in enumerate(brute_force_result['results']):
-            print(f"  {i+1}. Distance: {result['distance']:.4f}")
-            print(f"     Vector ID: {result['vector_id']}")
+    print("\nMethod Comparison:")
+    for method, data in comparison_result["methods"].items():
+        print(f"  {method}:")
+        print(f"    Time: {data['time']:.4f} seconds")
+        print(f"    Results: {data['count']}")
     
-    # Get index information
-    print("\nGetting index information...")
-    index_info = vector_db.get_index_info()
-    if index_info['success']:
-        print(f"Index Info:")
-        print(f"  Is indexed: {index_info['index_info']['is_indexed']}")
-        print(f"  Total clusters: {index_info['index_info']['total_clusters']}")
-        print(f"  Total vectors: {index_info['index_info']['total_vectors']}")
+    # Get index statistics
+    print("\nGetting index statistics...")
+    index_stats = vector_db.get_index_stats()
+    if index_stats['success']:
+        print(f"Index Stats:")
+        print(f"  Total vectors: {index_stats['stats']['total_vectors']}")
+        print(f"  Number of clusters: {index_stats['stats']['n_clusters']}")
+        print(f"  Average cluster size: {index_stats['stats']['avg_cluster_size']:.2f}")
+        print(f"  Standard deviation: {index_stats['stats']['std_cluster_size']:.2f}")
+        print(f"  Memory usage: {index_stats['stats']['memory_usage']}")
     
-    # Get cluster information
-    print("\nGetting cluster information...")
-    cluster_info = vector_db.get_cluster_vectors(0)
-    if cluster_info['success']:
-        print(f"Cluster 0 has {cluster_info['count']} vectors")
+    # Get database statistics
+    print("\nGetting database statistics...")
+    db_stats = vector_db.get_database_stats()
+    if db_stats['success']:
+        print(f"Database Stats:")
+        print(f"  Total vectors: {db_stats['stats']['total_vectors']}")
+        print(f"  Average dimension: {db_stats['stats']['avg_dimension']}")
+        print(f"  Database size: {db_stats['stats']['database_size']}")
+    
+    # Save index
+    print("\nSaving IVF index...")
+    save_result = vector_db.save_ivf_index()
+    if save_result['success']:
+        print(f"Index saved successfully!")
+    else:
+        print(f"Index save failed: {save_result['message']}")
     
     # Close database session
     db.close()

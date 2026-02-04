@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
-from database.vector_database import VectorDatabase
+from database.ivf_database import IVFVectorDatabase
 from config.database import SessionLocal
 from typing import List, Dict, Any, Optional
 import numpy as np
 
-app = FastAPI(title="Vector Database with Indexing API", version="1.0.0")
+app = FastAPI(title="IVF Vector Database API", version="1.0.0")
 
 # Dependency
 def get_db():
@@ -16,7 +16,7 @@ def get_db():
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to Vector Database with Indexing API"}
+    return {"message": "Welcome to IVF Vector Database API"}
 
 @app.post("/vectors")
 def insert_vector(vector_data: List[float], metadata: Dict[str, Any] = None, 
@@ -24,7 +24,7 @@ def insert_vector(vector_data: List[float], metadata: Dict[str, Any] = None,
     """
     Insert a vector into the database
     """
-    vector_db = VectorDatabase(db)
+    vector_db = IVFVectorDatabase(db)
     result = vector_db.insert_vector(vector_data, metadata, vector_id)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
@@ -36,32 +36,69 @@ def insert_vector_batch(vectors: List[Dict[str, Any]], batch_name: str = None,
     """
     Insert a batch of vectors
     """
-    vector_db = VectorDatabase(db)
+    vector_db = IVFVectorDatabase(db)
     result = vector_db.insert_vector_batch(vectors, batch_name, description)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
     return result
 
-@app.post("/index")
-def create_index(k: int = 100, force_rebuild: bool = False, db=Depends(get_db)):
+@app.post("/index/ivf")
+def create_ivf_index(n_clusters: int = 100, n_probes: int = 10, 
+                    force_rebuild: bool = False, db=Depends(get_db)):
     """
-    Create an index using K-Means clustering
+    Create an IVF index
     
     Args:
-        k: Number of clusters
+        n_clusters: Number of clusters
+        n_probes: Number of clusters to probe during search
         force_rebuild: Force rebuild even if index exists
     """
-    vector_db = VectorDatabase(db)
-    result = vector_db.create_index(k=k, force_rebuild=force_rebuild)
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.create_ivf_index(n_clusters, n_probes, force_rebuild)
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result["message"])
+    return result
+
+@app.post("/index/ivf/load")
+def load_ivf_index(db=Depends(get_db)):
+    """
+    Load IVF index from disk
+    """
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.load_ivf_index()
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result["message"])
+    return result
+
+@app.post("/index/ivf/save")
+def save_ivf_index(db=Depends(get_db)):
+    """
+    Save IVF index to disk
+    """
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.save_ivf_index()
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result["message"])
+    return result
+
+@app.post("/index/ivf/rebuild")
+def rebuild_ivf_index(n_clusters: int = 100, n_probes: int = 10, db=Depends(get_db)):
+    """
+    Rebuild the IVF index
+    
+    Args:
+        n_clusters: Number of clusters
+        n_probes: Number of clusters to probe
+    """
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.rebuild_ivf_index(n_clusters, n_probes)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
     return result
 
 @app.post("/search")
 def search_vectors(query_vector: List[float], k: int = 5, 
-                  distance_metric: str = 'cosine', 
-                  filters: Dict[str, Any] = None,
-                  use_index: bool = True,
+                  use_ivf: bool = True, use_rerank: bool = True,
                   n_probes: int = 10, db=Depends(get_db)):
     """
     Search for similar vectors
@@ -69,60 +106,43 @@ def search_vectors(query_vector: List[float], k: int = 5,
     Args:
         query_vector: Query vector
         k: Number of results to return
-        distance_metric: Distance metric to use
-        filters: Metadata filters (not implemented in this version)
-        use_index: Whether to use the index (if available)
-        n_probes: Number of clusters to probe for approximate search
+        use_ivf: Whether to use IVF index
+        use_rerank: Whether to use reranking
+        n_probes: Number of clusters to probe
     """
-    vector_db = VectorDatabase(db)
-    result = vector_db.search(query_vector, k, distance_metric, filters, use_index, n_probes)
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.search(query_vector, k, use_ivf, use_rerank, n_probes)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
     return result
 
-@app.get("/index/info")
-def get_index_info(db=Depends(get_db)):
+@app.post("/search/compare")
+def compare_search_methods(query_vector: List[float], k: int = 5, db=Depends(get_db)):
     """
-    Get information about the current index
+    Compare different search methods
     """
-    vector_db = VectorDatabase(db)
-    result = vector_db.get_index_info()
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.compare_search_methods(query_vector, k)
+    return result
+
+@app.get("/index/ivf/stats")
+def get_index_stats(db=Depends(get_db)):
+    """
+    Get IVF index statistics
+    """
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.get_index_stats()
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
     return result
 
-@app.get("/index/clusters/{cluster_id}")
-def get_cluster_vectors(cluster_id: int, db=Depends(get_db)):
+@app.get("/stats")
+def get_stats(db=Depends(get_db)):
     """
-    Get all vectors in a specific cluster
+    Get database statistics
     """
-    vector_db = VectorDatabase(db)
-    result = vector_db.get_cluster_vectors(cluster_id)
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
-
-@app.get("/index/clusters")
-def get_all_clusters(db=Depends(get_db)):
-    """
-    Get all clusters with their vectors
-    """
-    vector_db = VectorDatabase(db)
-    result = vector_db.get_all_clusters()
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
-
-@app.post("/index/rebuild")
-def rebuild_index(k: int = 100, db=Depends(get_db)):
-    """
-    Rebuild the index with new parameters
-    
-    Args:
-        k: Number of clusters
-    """
-    vector_db = VectorDatabase(db)
-    result = vector_db.rebuild_index(k=k)
+    vector_db = IVFVectorDatabase(db)
+    result = vector_db.get_database_stats()
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
     return result
