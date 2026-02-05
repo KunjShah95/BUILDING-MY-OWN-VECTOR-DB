@@ -13,12 +13,14 @@ Day 3 focused on **performance optimization** and **feature enhancement** for th
 **File**: `utils/clustering.py`
 
 **Features**:
+
 - ✅ **K-Means Algorithm** - From scratch implementation with convergence detection
 - ✅ **VectorIndexer** - Cluster-based search wrapper
 - ✅ **WCSS Calculation** - Within-Cluster Sum of Squares for quality assessment
 - ✅ **Multi-Cluster Search** - Probe multiple clusters for better results
 
 **Key Classes**:
+
 ```python
 class KMeans:
     def __init__(self, k: int, max_iters: int = 100, tol: float = 1e-4)
@@ -37,6 +39,7 @@ class VectorIndexer:
 **File**: `database/vector_database.py`
 
 **Features**:
+
 - ✅ **create_index()** - Build K-Means index with configurable clusters
 - ✅ **search()** - Switch between indexed and brute force search
 - ✅ **get_index_info()** - Retrieve index statistics
@@ -44,6 +47,7 @@ class VectorIndexer:
 - ✅ **rebuild_index()** - Rebuild with new parameters
 
 **Search Methods**:
+
 ```python
 # Indexed search (fast)
 search(query_vector, k=5, use_index=True, n_probes=10)
@@ -57,6 +61,7 @@ search(query_vector, k=5, use_index=False)
 **File**: `api/main.py`
 
 **New Endpoints**:
+
 - ✅ `POST /index` - Create K-Means index
 - ✅ `GET /index/info` - Get index statistics
 - ✅ `GET /index/clusters/{cluster_id}` - Get cluster vectors
@@ -64,21 +69,25 @@ search(query_vector, k=5, use_index=False)
 - ✅ `POST /index/rebuild` - Rebuild index
 
 **Updated Endpoints**:
+
 - ✅ `POST /search` - Now supports indexed search with `use_index` parameter
 
 ### 4. **Performance Improvements**
 
 **Before (Brute Force)**:
+
 - **O(n×d + n log n)** complexity
 - Must load ALL vectors into memory
 - Query time increases linearly with dataset size
 
 **After (Indexed Search)**:
+
 - **O(k×d + k log k)** complexity (k = number of clusters)
 - Only searches relevant clusters
 - **10-100x faster** for large datasets
 
 **Performance Comparison**:
+
 | Dataset Size | Brute Force | Indexed Search |
 |--------------|-------------|----------------|
 | 1K vectors | ~10-50ms | ~1-5ms |
@@ -90,6 +99,7 @@ search(query_vector, k=5, use_index=False)
 **File**: `test/test_clustering.py`
 
 **Test Cases**:
+
 - ✅ `test_kmeans_basic()` - Basic K-Means functionality
 - ✅ `test_vector_indexer()` - VectorIndexer search
 - ✅ `test_cluster_assignment()` - Cluster assignment validation
@@ -101,6 +111,7 @@ search(query_vector, k=5, use_index=False)
 ### **K-Means Algorithm**
 
 **Initialization**:
+
 ```python
 # Random centroid selection
 for i in range(self.k):
@@ -109,6 +120,7 @@ for i in range(self.k):
 ```
 
 **Assignment Step**:
+
 ```python
 # Assign each point to nearest centroid
 for point in data:
@@ -118,6 +130,7 @@ for point in data:
 ```
 
 **Update Step**:
+
 ```python
 # Update centroids as mean of assigned points
 for i in range(self.k):
@@ -127,6 +140,7 @@ for i in range(self.k):
 ```
 
 **Convergence**:
+
 ```python
 # Check if centroids moved less than tolerance
 if np.all(np.abs(self.centroids - new_centroids) < self.tol):
@@ -137,6 +151,7 @@ if np.all(np.abs(self.centroids - new_centroids) < self.tol):
 ### **VectorIndexer Search**
 
 **Cluster Selection**:
+
 ```python
 # Find closest clusters based on centroid distances
 distances = [np.linalg.norm(query_vector - centroid) for centroid in self.centroids]
@@ -146,6 +161,7 @@ selected_clusters = [cluster_id for cluster_id, _ in cluster_distances[:n_probes
 ```
 
 **Multi-Cluster Search**:
+
 ```python
 # Search in all selected clusters and combine results
 all_results = []
@@ -163,6 +179,7 @@ return all_results[:k]
 ## 📊 Performance Benchmarks
 
 ### **Test Setup**
+
 - **Vector Dimensions**: 128
 - **Distance Metric**: Cosine
 - **Hardware**: Standard laptop (Intel i7, 16GB RAM)
@@ -171,6 +188,7 @@ return all_results[:k]
 ### **Benchmark Results**
 
 #### **Small Dataset (1K vectors)**
+
 ```
 Brute Force Search: 12.4ms
 Indexed Search: 1.8ms
@@ -178,6 +196,7 @@ Speedup: 6.9x
 ```
 
 #### **Medium Dataset (10K vectors)**
+
 ```
 Brute Force Search: 156.2ms
 Indexed Search: 8.3ms
@@ -185,6 +204,7 @@ Speedup: 18.8x
 ```
 
 #### **Large Dataset (100K vectors)**
+
 ```
 Brute Force Search: 1,842.7ms (1.8s)
 Indexed Search: 45.6ms
@@ -192,6 +212,7 @@ Speedup: 40.4x
 ```
 
 ### **Memory Usage**
+
 - **Brute Force**: Loads all vectors (100K × 128 × 4 bytes ≈ 51MB)
 - **Indexed Search**: Only loads cluster centroids (100 × 128 × 4 bytes ≈ 51KB)
 
@@ -200,6 +221,7 @@ Speedup: 40.4x
 ## 🚀 How to Use (Updated)
 
 ### **Running the Application**
+
 ```bash
 # Activate virtual environment
 .\.venv\Scripts\Activate.ps1
@@ -211,6 +233,7 @@ Speedup: 40.4x
 ### **Using the API**
 
 #### **Create Index**
+
 ```bash
 curl -X POST "http://localhost:8000/index" \
   -H "Content-Type: application/json" \
@@ -218,6 +241,7 @@ curl -X POST "http://localhost:8000/index" \
 ```
 
 #### **Search with Index**
+
 ```bash
 curl -X POST "http://localhost:8000/search" \
   -H "Content-Type: application/json" \
@@ -230,11 +254,13 @@ curl -X POST "http://localhost:8000/search" \
 ```
 
 #### **Get Index Information**
+
 ```bash
 curl -X GET "http://localhost:8000/index/info"
 ```
 
 ### **Using the CLI**
+
 ```python
 from database.vector_database import VectorDatabase
 from config.database import SessionLocal
@@ -266,10 +292,12 @@ def main():
 ## 📁 Files Modified
 
 ### **New Files**
+
 - `utils/clustering.py` - K-Means implementation and VectorIndexer
 - `test/test_clustering.py` - Clustering tests
 
 ### **Updated Files**
+
 - `database/vector_database.py` - Added indexing methods
 - `models/vector_model.py` - Enhanced search with filters
 - `api/main.py` - Added index-related endpoints
@@ -280,21 +308,25 @@ def main():
 ## 🎯 Key Learnings
 
 ### **1. Indexing Trade-offs**
+
 - **Accuracy vs Speed**: Indexed search is faster but may miss some similar vectors
 - **Memory vs Performance**: Storing centroids uses less memory than loading all vectors
 - **Cluster Quality**: WCSS helps measure how well clusters separate the data
 
 ### **2. K-Means Considerations**
+
 - **Initialization Matters**: Random initialization can lead to different results
 - **Convergence Criteria**: Tolerance and max iterations affect quality
 - **Cluster Count**: More clusters = faster search but more memory usage
 
 ### **3. Search Optimization**
+
 - **Multi-Cluster Probing**: Searching nearby clusters improves recall
 - **Distance Metrics**: Euclidean works well for clustering, cosine for similarity
 - **Batch Processing**: Index creation can be optimized for large datasets
 
 ### **4. API Design**
+
 - **Flexible Parameters**: Allow users to choose between speed and accuracy
 - **Error Handling**: Graceful fallback to brute force when index unavailable
 - **Documentation**: Clear parameter descriptions for API consumers
@@ -304,21 +336,25 @@ def main():
 ## 🔄 Next Steps (Day 4+)
 
 ### **Advanced Indexing**
+
 1. **HNSW Integration** - Hierarchical Navigable Small World graphs
 2. **Product Quantization** - Reduce memory footprint
 3. **IVFADC** - Inverted File with Asymmetric Distance Computation
 
 ### **Performance Optimization**
+
 1. **Batch Index Creation** - Parallel processing for large datasets
 2. **Caching Layer** - Redis for frequent queries
 3. **Database Tuning** - PostgreSQL settings for vector workloads
 
 ### **Feature Enhancement**
+
 1. **Real-time Updates** - Dynamic index updates
 2. **Vector Compression** - Reduce storage requirements
 3. **Multi-Modal Search** - Text + image embeddings
 
 ### **Monitoring & Observability**
+
 1. **Performance Metrics** - Query latency and throughput
 2. **Index Health** - Cluster quality and distribution
 3. **Resource Usage** - Memory and CPU monitoring
@@ -328,6 +364,7 @@ def main():
 ## 📊 Current Status
 
 ### **Working Features** ✅
+
 - ✅ Vector insertion with metadata
 - ✅ Batch vector insertion
 - ✅ K-Means clustering with configurable clusters
@@ -336,12 +373,14 @@ def main():
 - ✅ Comprehensive testing suite
 
 ### **Performance Metrics** ✅
+
 - **Search Speed**: 45ms for 100K vectors (indexed)
 - **Memory Usage**: 51KB for index vs 51MB for brute force
 - **Accuracy**: 95%+ recall with 10 cluster probes
 - **Scalability**: Handles millions of vectors with proper tuning
 
 ### **Code Quality** ✅
+
 - **Test Coverage**: 85%+ with pytest
 - **Error Handling**: Comprehensive exception handling
 - **Documentation**: Detailed docstrings and comments
@@ -354,6 +393,7 @@ def main():
 ### **Common Issues**
 
 #### **Index Creation Fails**
+
 ```bash
 # Check if vectors exist
 vector_db.get_vector_count()
@@ -363,6 +403,7 @@ vector_db.create_index(k=100, force_rebuild=True)
 ```
 
 #### **Search Returns No Results**
+
 ```bash
 # Check if index exists
 vector_db.get_index_info()
@@ -372,6 +413,7 @@ vector_db.search(query_vector, k=5, use_index=False)
 ```
 
 #### **Performance Issues**
+
 ```bash
 # Adjust cluster count
 # More clusters = faster search, less accurate
@@ -385,11 +427,13 @@ vector_db.search(query_vector, k=5, n_probes=20)
 ### **Performance Tuning**
 
 #### **Cluster Count (k)**
+
 - **Small datasets (1K-10K)**: k=50-100
 - **Medium datasets (10K-100K)**: k=100-500
 - **Large datasets (100K+)**: k=500-2000
 
 #### **Probes (n_probes)**
+
 - **Fast search**: n_probes=5-10
 - **Balanced**: n_probes=10-20
 - **Accurate**: n_probes=20-50
@@ -399,16 +443,19 @@ vector_db.search(query_vector, k=5, n_probes=20)
 ## 📚 Resources
 
 ### **Documentation**
+
 - [SQLAlchemy ORM Documentation](https://docs.sqlalchemy.org/en/20/orm/)
 - [PostgreSQL Array Types](https://www.postgresql.org/docs/current/arrays.html)
 - [K-Means Clustering](https://scikit-learn.org/stable/modules/clustering.html#k-means)
 
 ### **Performance Tools**
+
 - [PostgreSQL EXPLAIN](https://www.postgresql.org/docs/current/sql-explain.html)
 - [Python cProfile](https://docs.python.org/3/library/profile.html)
 - [NumPy Performance](https://numpy.org/doc/stable/user/basics.html)
 
 ### **Vector Database References**
+
 - [FAISS Library](https://github.com/facebookresearch/faiss)
 - [Annoy Library](https://github.com/spotify/annoy)
 - [HNSW Algorithm](https://arxiv.org/abs/1603.09320)

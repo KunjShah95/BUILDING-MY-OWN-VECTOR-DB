@@ -1,180 +1,440 @@
-from fastapi import FastAPI, Depends, HTTPException
-from database.hnsw_database import HNSWVectorDatabase
-from config.database import SessionLocal
+from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
-import numpy as np
+import logging
+import time
 
-app = FastAPI(title="HNSW Vector Database API", version="1.0.0")
+# Import configurations
+from config.database import Base, engine, get_db
+from config.settings import get_settings
+from models.pydantic_models import (
+    VectorCreate, VectorUpdate, VectorResponse,
+    BatchInsert, BatchResponse, SearchRequest, SearchResponse,
+    IndexCreate, IndexResponse, StatsResponse, HealthResponse,
+    ErrorResponse, SearchMethod
+)
+from services.vector_service import VectorService
+
+# Initialize FastAPI app
+settings = get_settings()
+app = FastAPI(
+    title=settings.APP_NAME,
+    description="A production-ready Vector Database API with HNSW and IVF indexing support",
+    version=settings.APP_VERSION,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_tags=[
+        {"name": "Vectors", "description": "Vector CRUD operations"},
+        {"name": "Search", "description": "Vector similarity search"},
+        {"name": "Index", "description": "Index management"},
+        {"name": "Stats", "description": "Statistics and monitoring"},
+        {"name": "Health", "description": "Health checks"}
+    ]
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_HOSTS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO if not settings.DEBUG else logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Dependency
-def get_db():
-    db = SessionLocal()
+def get_vector_service(db: Session = Depends(get_db)) -> VectorService:
+    """
+    Dependency to get vector service
+    """
+    return VectorService(db)
+
+# ==================== Error Handlers ====================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """
+    Global exception handler
+    """
+    logger.error(f"Unhandled exception: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal server error",
+            "detail": str(exc) if settings.DEBUG else None
+        }
+    )
+
+# ==================== Middleware ====================
+
+@app.middleware("http")
+async def add_process_time_header(request, call_next):
+    """
+    Add processing time header
+    """
+    start_time = time.time()
+    response = await call_next(response=await call_next(request))
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+
+# ==================== Health Check ====================
+
+@app.get("/health", response_model=HealthResponse, tags=["Health"])
+async def health_check(db: Session = Depends(get_db)):
+    """
+    Health check endpoint
+    """
+    service = VectorService(db)
+    health = service.get_health_status()
+    
+    status_code = 200 if health["status"] == "healthy" else 503
+    
+    return JSONResponse(
+        status_code=status_code,
+        content=health
+    )
+
+@app.get("/ready", tags=["Health"])
+async def readiness_check():
+    """
+    Readiness check endpoint
+    """
+    return {"status": "ready"}
+
+# ==================== Vector Operations ====================
+
+@app.post("/vectors", response_model=Dict[str, Any], tags=["Vectors"],
+          status_code=status.HTTP_201_CREATED)
+async def create_vector(
+    vector_data: VectorCreate,
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Create a new vector
+    
+    - **vector**: Vector data as list of floats
+    - **metadata**: Optional metadata dictionary
+    - **vector_id**: Optional custom vector ID
+    """
+    result = service.create_vector(
+        vector_data=vector_data.vector,
+        metadata=vector_data.metadata,
+        vector_id=vector_data.vector_id
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result)
+    
+    return result
+
+@app.post("/vectors/batch", response_model=BatchResponse, tags=["Vectors"],
+          status_code=status.HTTP_201_CREATED)
+async def create_vector_batch(
+    batch_data: BatchInsert,
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Create multiple vectors in a batch
+    
+    - **vectors**: List of vector dictionaries with 'vector', 'vector_id', and 'metadata'
+    - **batch_name**: Optional batch name
+    - **description**: Optional batch description
+    """
+    result = service.create_vector_batch(
+        vectors=batch_data.vectors,
+        batch_name=batch_data.batch_name,
+        description=batch_data.description
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result)
+    
+    return result
+
+@app.get("/vectors", tags=["Vectors"])
+async def get_all_vectors(
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of vectors"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Get all vectors with pagination
+    
+    - **limit**: Maximum number of vectors to return (1-1000)
+    - **offset**: Offset for pagination
+    """
+    result = service.get_all_vectors(limit=limit, offset=offset)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result)
+    
+    return result
+
+@app.get("/vectors/{vector_id}", tags=["Vectors"])
+async def get_vector(
+    vector_id: str,
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Get a vector by ID
+    
+    - **vector_id**: Vector ID
+    """
+    result = service.get_vector(vector_id)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=404, detail=result)
+    
+    return result
+
+@app.put("/vectors/{vector_id}", tags=["Vectors"])
+async def update_vector(
+    vector_id: str,
+    update_data: VectorUpdate,
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Update a vector
+    
+    - **vector_id**: Vector ID
+    - **vector**: Optional new vector data
+    - **metadata**: Optional new metadata
+    """
+    result = service.update_vector(
+        vector_id=vector_id,
+        vector_data=update_data.vector,
+        metadata=update_data.metadata
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=404 if "not found" in result.get("message", "") else 400, 
+                          detail=result)
+    
+    return result
+
+@app.delete("/vectors/{vector_id}", tags=["Vectors"])
+async def delete_vector(
+    vector_id: str,
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Delete a vector
+    
+    - **vector_id**: Vector ID
+    """
+    result = service.delete_vector(vector_id)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=404 if "not found" in result.get("message", "") else 400, 
+                          detail=result)
+    
+    return result
+
+# ==================== Search Operations ====================
+
+@app.post("/search", response_model=Dict[str, Any], tags=["Search"])
+async def search_vectors(
+    search_data: SearchRequest,
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Search for similar vectors
+    
+    - **query_vector**: Query vector
+    - **k**: Number of results (1-100)
+    - **method**: Search method (hnsw, brute)
+    - **ef_search**: HNSW search parameter
+    - **filters**: Optional metadata filters
+    """
+    result = service.search_vectors(
+        query_vector=search_data.query_vector,
+        k=search_data.k,
+        method=search_data.method.value if search_data.method else 'hnsw',
+        ef_search=search_data.ef_search
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result)
+    
+    return result
+
+@app.get("/search/compare", tags=["Search"])
+async def compare_search_methods(
+    query_vector: str = Query(..., description="Query vector as comma-separated values"),
+    k: int = Query(5, ge=1, le=100, description="Number of results"),
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Compare search methods
+    
+    - **query_vector**: Query vector as comma-separated values
+    - **k**: Number of results
+    """
     try:
-        yield db
-    finally:
-        db.close()
-
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to HNSW Vector Database API"}
-
-@app.post("/vectors")
-def insert_vector(vector_data: List[float], metadata: Dict[str, Any] = None, 
-                 vector_id: str = None, db=Depends(get_db)):
-    """
-    Insert a vector into the database
-    """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.insert_vector(vector_data, metadata, vector_id)
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
-
-@app.post("/vectors/batch")
-def insert_vector_batch(vectors: List[Dict[str, Any]], batch_name: str = None,
-                       description: str = None, db=Depends(get_db)):
-    """
-    Insert a batch of vectors
-    """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.insert_vector_batch(vectors, batch_name, description)
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
-
-@app.post("/index/hnsw")
-def create_hnsw_index(m: int = 16, m0: int = None, 
-                     ef_construction: int = 200, db=Depends(get_db)):
-    """
-    Create an HNSW index
+        query_list = [float(x) for x in query_vector.split(",")]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid query vector format")
     
-    Args:
-        m: Number of neighbors per node
-        m0: Number of neighbors in layer 0
-        ef_construction: Construction parameter
-    """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.create_hnsw_index(m, m0, ef_construction)
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
+    result = service.compare_search_methods(query_list, k)
     return result
 
-@app.post("/index/hnsw/load")
-def load_hnsw_index(db=Depends(get_db)):
+@app.post("/search/batch", tags=["Search"])
+async def batch_search(
+    queries: List[SearchRequest],
+    service: VectorService = Depends(get_vector_service)
+):
     """
-    Load HNSW index from disk
-    """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.load_hnsw_index()
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
-
-@app.post("/index/hnsw/save")
-def save_hnsw_index(db=Depends(get_db)):
-    """
-    Save HNSW index to disk
-    """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.save_hnsw_index()
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
-
-@app.post("/index/hnsw/rebuild")
-def rebuild_hnsw_index(m: int = 16, m0: int = None, 
-                      ef_construction: int = 200, db=Depends(get_db)):
-    """
-    Rebuild HNSW index
+    Perform multiple searches in batch
     
-    Args:
-        m: Number of neighbors per node
-        m0: Number of neighbors in layer 0
-        ef_construction: Construction parameter
+    - **queries**: List of search requests
     """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.rebuild_hnsw_index(m, m0, ef_construction)
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
-
-@app.post("/search/hnsw")
-def search_hnsw(query_vector: List[float], k: int = 5, 
-               ef_search: int = None, db=Depends(get_db)):
-    """
-    Search using HNSW index
+    results = []
+    for i, query in enumerate(queries):
+        result = service.search_vectors(
+            query_vector=query.query_vector,
+            k=query.k,
+            method=query.method.value if query.method else 'hnsw',
+            ef_search=query.ef_search
+        )
+        results.append({
+            "query_index": i,
+            "result": result
+        })
     
-    Args:
-        query_vector: Query vector
-        k: Number of results to return
-        ef_search: Search parameter (higher = better recall)
-    """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.search_hnsw(query_vector, k, ef_search)
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
-    return result
+    return {
+        "success": True,
+        "results": results,
+        "total_queries": len(queries)
+    }
 
-@app.post("/search")
-def search_vectors(query_vector: List[float], k: int = 5, 
-                  method: str = 'hnsw', ef_search: int = None, db=Depends(get_db)):
+# ==================== Index Operations ====================
+
+@app.post("/index", response_model=Dict[str, Any], tags=["Index"])
+async def create_index(
+    index_data: IndexCreate,
+    service: VectorService = Depends(get_vector_service)
+):
     """
-    Search using specified method
+    Create an index
     
-    Args:
-        query_vector: Query vector
-        k: Number of results to return
-        method: Search method ('hnsw', 'brute')
-        ef_search: HNSW search parameter
+    - **method**: Indexing method (hnsw, ivf)
+    - **m**: HNSW: Number of neighbors
+    - **m0**: HNSW: Neighbors in layer 0
+    - **ef_construction**: HNSW: Construction parameter
+    - **n_clusters**: IVF: Number of clusters
+    - **n_probes**: IVF: Number of probes
     """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.search(query_vector, k, method, ef_search)
+    result = service.create_index(
+        method=index_data.method.value if index_data.method else 'hnsw',
+        m=index_data.m,
+        m0=index_data.m0,
+        ef_construction=index_data.ef_construction,
+        n_clusters=index_data.n_clusters,
+        n_probes=index_data.n_probes
+    )
+    
     if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
+        raise HTTPException(status_code=400, detail=result)
+    
     return result
 
-@app.post("/search/compare")
-def compare_search_methods(query_vector: List[float], k: int = 5, db=Depends(get_db)):
+@app.post("/index/save", tags=["Index"])
+async def save_index(
+    method: SearchMethod = Query(SearchMethod.HNSW, description="Indexing method"),
+    service: VectorService = Depends(get_vector_service)
+):
     """
-    Compare different search methods
+    Save index to disk
+    
+    - **method**: Indexing method
     """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.compare_search_methods(query_vector, k)
-    return result
-
-@app.get("/index/hnsw/info")
-def get_hnsw_index_info(db=Depends(get_db)):
-    """
-    Get HNSW index information
-    """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.get_hnsw_index_info()
+    result = service.save_index(method.value if method else 'hnsw')
+    
     if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
+        raise HTTPException(status_code=400, detail=result)
+    
     return result
 
-@app.delete("/vectors/{vector_id}")
-def delete_vector(vector_id: str, db=Depends(get_db)):
+@app.post("/index/load", tags=["Index"])
+async def load_index(
+    method: SearchMethod = Query(SearchMethod.HNSW, description="Indexing method"),
+    service: VectorService = Depends(get_vector_service)
+):
     """
-    Delete a vector by ID
+    Load index from disk
+    
+    - **method**: Indexing method
     """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.delete_vector(vector_id)
+    result = service.load_index(method.value if method else 'hnsw')
+    
     if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
+        raise HTTPException(status_code=400, detail=result)
+    
     return result
 
-@app.get("/stats")
-def get_stats(db=Depends(get_db)):
+@app.get("/index", tags=["Index"])
+async def get_index_info(
+    method: SearchMethod = Query(SearchMethod.HNSW, description="Indexing method"),
+    service: VectorService = Depends(get_vector_service)
+):
+    """
+    Get index information
+    
+    - **method**: Indexing method
+    """
+    result = service.get_index_info(method.value if method else 'hnsw')
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result)
+    
+    return result
+
+# ==================== Statistics ====================
+
+@app.get("/stats", response_model=StatsResponse, tags=["Stats"])
+async def get_statistics(
+    service: VectorService = Depends(get_vector_service)
+):
     """
     Get database statistics
     """
-    vector_db = HNSWVectorDatabase(db)
-    result = vector_db.get_database_stats()
+    result = service.get_database_stats()
+    
     if not result["success"]:
-        raise HTTPException(status_code=500, detail=result["message"])
+        raise HTTPException(status_code=500, detail=result)
+    
     return result
+
+# ==================== Root ====================
+
+@app.get("/", tags=["Root"])
+async def root():
+    """
+    Root endpoint
+    """
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "api.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.DEBUG,
+        log_level="debug" if settings.DEBUG else "info"
+    )
