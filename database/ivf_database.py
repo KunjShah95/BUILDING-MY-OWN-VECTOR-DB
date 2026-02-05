@@ -14,6 +14,21 @@ class IVFVectorDatabase:
         self.vector_model = VectorModel(db_session)
         self.ivf_index = None
         self.index_path = "index_data.json"
+    
+    def clear_database(self) -> Dict[str, Any]:
+        """
+        Clear all vectors from the database
+        """
+        try:
+            result = self.vector_model.clear_all_vectors()
+            # Reset index
+            self.ivf_index = None
+            return result
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error clearing database: {str(e)}"
+            }
         
     def insert_vector(self, vector_data: List[float], metadata: Dict[str, Any] = None, 
                      vector_id: str = None) -> Dict[str, Any]:

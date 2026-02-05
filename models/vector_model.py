@@ -9,83 +9,122 @@ from database.schema import Vector, VectorBatch, VectorBatchMapping
 class VectorModel:
     def __init__(self, db: Session):
         self.db = db
+    
+    def clear_all_vectors(self) -> Dict[str, Any]:
+        """
+        Clear all vectors from the database
+        """
+        try:
+            # Delete all mappings first (due to foreign key constraints)
+            self.db.query(VectorBatchMapping).delete()
+            # Delete all batches
+            self.db.query(VectorBatch).delete()
+            # Delete all vectors
+            deleted_count = self.db.query(Vector).delete()
+            self.db.commit()
+            
+            return {
+                "success": True,
+                "message": f"Cleared {deleted_count} vectors from database",
+                "deleted_count": deleted_count
+            }
+        except Exception as e:
+            self.db.rollback()
+            return {
+                "success": False,
+                "message": f"Error clearing vectors: {str(e)}"
+            }
 
     def create_vector(self, vector_data: List[float], metadata: Dict[str, Any] = None, 
                      vector_id: str = None) -> Vector:
         """
         Create a new vector in the database
         """
-        if vector_id is None:
-            # Generate a unique vector_id using UUID for guaranteed uniqueness
-            vector_id = f"vec_{uuid.uuid4().hex[:12]}"
-        
-        # Validate vector data
-        if not isinstance(vector_data, list):
-            raise ValueError("Vector data must be a list")
-        
-        if len(vector_data) == 0:
-            raise ValueError("Vector data cannot be empty")
-        
-        # Convert to proper format if needed
-        vector_data = [float(x) for x in vector_data]
-        
-        vector = Vector(
-            vector_data=vector_data,
-            meta_data=metadata,
-            vector_id=vector_id
-        )
-        
-        self.db.add(vector)
-        self.db.commit()
-        self.db.refresh(vector)
-        
-        return vector
+        try:
+            if vector_id is None:
+                # Generate a unique vector_id using UUID for guaranteed uniqueness
+                vector_id = f"vec_{uuid.uuid4().hex[:12]}"
+            
+            # Check if vector with this ID already exists
+            existing = self.get_vector(vector_id)
+            if existing:
+                # Return existing vector instead of creating duplicate
+                return existing
+            
+            # Validate vector data
+            if not isinstance(vector_data, list):
+                raise ValueError("Vector data must be a list")
+            
+            if len(vector_data) == 0:
+                raise ValueError("Vector data cannot be empty")
+            
+            # Convert to proper format if needed
+            vector_data = [float(x) for x in vector_data]
+            
+            vector = Vector(
+                vector_data=vector_data,
+                meta_data=metadata,
+                vector_id=vector_id
+            )
+            
+            self.db.add(vector)
+            self.db.commit()
+            self.db.refresh(vector)
+            
+            return vector
+        except Exception as e:
+            self.db.rollback()
+            raise
     
     def create_vector_batch(self, vectors: List[Dict[str, Any]], batch_name: str = None, 
                            description: str = None) -> Dict[str, Any]:
         """
         Create a batch of vectors
         """
-        if not vectors:
-            return {"success": False, "message": "No vectors provided"}
-        
-        # Create batch record
-        batch = VectorBatch(
-            batch_name=batch_name or f"batch_{uuid.uuid4().hex[:12]}",
-            batch_size=len(vectors),
-            description=description
-        )
-        
-        self.db.add(batch)
-        self.db.commit()
-        self.db.refresh(batch)
-        
-        # Create vector records and mappings
-        vector_ids = []
-        for vector_data in vectors:
-            vector = self.create_vector(
-                vector_data=vector_data.get('vector'),
-                metadata=vector_data.get('metadata'),
-                vector_id=vector_data.get('vector_id')
-            )
-            vector_ids.append(vector.vector_id)
+        try:
+            if not vectors:
+                return {"success": False, "message": "No vectors provided"}
             
-            # Create mapping
-            mapping = VectorBatchMapping(
-                batch_id=batch.id,
-                vector_id=vector.vector_id
+            # Create batch record
+            batch = VectorBatch(
+                batch_name=batch_name or f"batch_{uuid.uuid4().hex[:12]}",
+                batch_size=len(vectors),
+                description=description
             )
-            self.db.add(mapping)
-        
-        self.db.commit()
-        
-        return {
-            "success": True,
-            "batch_id": batch.id,
-            "batch_name": batch.batch_name,
-            "vector_count": len(vectors),
-            "vector_ids": vector_ids
-        }
+            
+            self.db.add(batch)
+            self.db.commit()
+            self.db.refresh(batch)
+            
+            # Create vector records and mappings
+            vector_ids = []
+            for vector_data in vectors:
+                vector = self.create_vector(
+                    vector_data=vector_data.get('vector'),
+                    metadata=vector_data.get('metadata'),
+                    vector_id=vector_data.get('vector_id')
+                )
+                vector_ids.append(vector.vector_id)
+                
+                # Create mapping
+                mapping = VectorBatchMapping(
+                    batch_id=batch.id,
+                    vector_id=vector.vector_id
+                )
+                self.db.add(mapping)
+            
+            self.db.commit()
+            
+            return {
+                "success": True,
+                "batch_id": batch.id,
+                "batch_name": batch.batch_name,
+                "vector_count": len(vectors),
+                "vector_ids": vector_ids
+            }
+        except Exception as e:
+            self.db.rollback()
+            raise
     
     def get_vector(self, vector_id: str) -> Optional[Vector]:
         """
