@@ -1,3 +1,4 @@
+import os
 from typing import List, Dict, Any, Optional, Union
 from sqlalchemy.orm import Session
 from database.schema import Vector, VectorBatch, VectorBatchMapping

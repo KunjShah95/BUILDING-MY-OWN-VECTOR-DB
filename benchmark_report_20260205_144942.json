@@ -1,0 +1,731 @@
+{
+  "name": "HNSW Performance Benchmark",
+  "timestamp": "2026-02-05 14:49:42",
+  "config": {
+    "database_vectors": 10000,
+    "query_vectors": 100,
+    "k": 10
+  },
+  "summary_stats": {
+    "total_queries": 100,
+    "total_time": 22.421547651290894,
+    "avg_query_time": 0.12872296333312988,
+    "median_query_time": 0.03930079936981201,
+    "min_query_time": 0.00047278404235839844,
+    "max_query_time": 0.7892796993255615,
+    "std_query_time": 0.18243344228417863,
+    "avg_recall": 0.981,
+    "avg_precision": 0.999,
+    "avg_f1_score": 0.9826363636363636,
+    "avg_throughput": 180.11555551758357,
+    "queries_per_second": 4.459995427400509
+  },
+  "recommendations": [
+    "High recall achieved - consider optimizing for speed if needed",
+    "Query times are high - consider optimizing index or reducing ef_search",
+    "High variance in query times - consider index optimization",
+    "Low throughput - consider batch processing or index optimization"
+  ],
+  "results": [
+    {
+      "query_time": 0.32393383979797363,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 3.0870501230240888
+    },
+    {
+      "query_time": 0.0036389827728271484,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 274.8020703662452
+    },
+    {
+      "query_time": 0.08599400520324707,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 11.628717579050972
+    },
+    {
+      "query_time": 0.014516353607177734,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 68.88782314489373
+    },
+    {
+      "query_time": 0.001077413558959961,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 928.1487054658111
+    },
+    {
+      "query_time": 0.3278512954711914,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 3.05016333262551
+    },
+    {
+      "query_time": 0.015381336212158203,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 65.0138574572961
+    },
+    {
+      "query_time": 0.007453203201293945,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 134.17049998400563
+    },
+    {
+      "query_time": 0.0020570755004882812,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 486.1270282800185
+    },
+    {
+      "query_time": 0.0016131401062011719,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 619.9089565474432
+    },
+    {
+      "query_time": 0.02445816993713379,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 40.8861334503095
+    },
+    {
+      "query_time": 0.010426044464111328,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 95.91365195517952
+    },
+    {
+      "query_time": 0.0004858970642089844,
+      "recall": 0.1,
+      "precision": 1.0,
+      "f1_score": 0.18181818181818182,
+      "throughput": 2058.0490677134444
+    },
+    {
+      "query_time": 0.18270516395568848,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 5.473299048310042
+    },
+    {
+      "query_time": 0.024340391159057617,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 41.08397410153687
+    },
+    {
+      "query_time": 0.0062410831451416016,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 160.22859762386827
+    },
+    {
+      "query_time": 0.4885380268096924,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 2.046923566073896
+    },
+    {
+      "query_time": 0.0223846435546875,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 44.67348329925017
+    },
+    {
+      "query_time": 0.016858339309692383,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 59.31782375652322
+    },
+    {
+      "query_time": 0.001430511474609375,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 699.0506666666666
+    },
+    {
+      "query_time": 0.0020308494567871094,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 492.4047898567739
+    },
+    {
+      "query_time": 0.05982685089111328,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 16.714902842204264
+    },
+    {
+      "query_time": 0.031073570251464844,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 32.18168983825922
+    },
+    {
+      "query_time": 0.6666154861450195,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 1.5001151650150144
+    },
+    {
+      "query_time": 0.35007762908935547,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 2.856509290814339
+    },
+    {
+      "query_time": 0.43877530097961426,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 2.27907085418753
+    },
+    {
+      "query_time": 0.023874998092651367,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 41.884820100060914
+    },
+    {
+      "query_time": 0.14936113357543945,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 6.695182180677004
+    },
+    {
+      "query_time": 0.44415712356567383,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 2.251455502890608
+    },
+    {
+      "query_time": 0.013455390930175781,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 74.31965412148274
+    },
+    {
+      "query_time": 0.05702829360961914,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 17.53515556410278
+    },
+    {
+      "query_time": 0.28102684020996094,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 3.558378976374212
+    },
+    {
+      "query_time": 0.011872053146362305,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 84.2314288583191
+    },
+    {
+      "query_time": 0.5881168842315674,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 1.7003422734693265
+    },
+    {
+      "query_time": 0.28000831604003906,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 3.571322502639556
+    },
+    {
+      "query_time": 0.00047278404235839844,
+      "recall": 0.1,
+      "precision": 1.0,
+      "f1_score": 0.18181818181818182,
+      "throughput": 2115.130610186586
+    },
+    {
+      "query_time": 0.11041116714477539,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 9.057054878233117
+    },
+    {
+      "query_time": 0.24239826202392578,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 4.125442120130777
+    },
+    {
+      "query_time": 0.1757984161376953,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 5.688333387581508
+    },
+    {
+      "query_time": 0.0280916690826416,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 35.59774241459792
+    },
+    {
+      "query_time": 0.001300811767578125,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 768.7507331378299
+    },
+    {
+      "query_time": 0.0021479129791259766,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 465.56820956820957
+    },
+    {
+      "query_time": 0.020228147506713867,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 49.436064259868225
+    },
+    {
+      "query_time": 0.10438776016235352,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 9.579667179798736
+    },
+    {
+      "query_time": 0.20253849029541016,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 4.937333138710877
+    },
+    {
+      "query_time": 0.003930330276489258,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 254.43154382772218
+    },
+    {
+      "query_time": 0.15868902206420898,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 6.30163313751709
+    },
+    {
+      "query_time": 0.10846424102783203,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 9.219628427984842
+    },
+    {
+      "query_time": 0.0014193058013916016,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 704.5697967411389
+    },
+    {
+      "query_time": 0.09162735939025879,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 10.913770806608156
+    },
+    {
+      "query_time": 0.11977243423461914,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 8.349166537277899
+    },
+    {
+      "query_time": 0.05282473564147949,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 18.93052540360981
+    },
+    {
+      "query_time": 0.06429004669189453,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 15.554507290878615
+    },
+    {
+      "query_time": 0.06053566932678223,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 16.519186309840293
+    },
+    {
+      "query_time": 0.0009741783142089844,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 1026.506118453255
+    },
+    {
+      "query_time": 0.19130539894104004,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 5.227244006365958
+    },
+    {
+      "query_time": 0.004683256149291992,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 213.52665071526752
+    },
+    {
+      "query_time": 0.09291195869445801,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 10.762877180197126
+    },
+    {
+      "query_time": 0.01305079460144043,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 76.6236869508029
+    },
+    {
+      "query_time": 0.5485424995422363,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 1.8230128036287234
+    },
+    {
+      "query_time": 0.00225067138671875,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 444.31186440677965
+    },
+    {
+      "query_time": 0.7387504577636719,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 1.3536370630851136
+    },
+    {
+      "query_time": 0.008941173553466797,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 111.84214175243987
+    },
+    {
+      "query_time": 0.0928187370300293,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 10.77368677917341
+    },
+    {
+      "query_time": 0.15007829666137695,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 6.663188630507376
+    },
+    {
+      "query_time": 0.03543734550476074,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 28.218817909644432
+    },
+    {
+      "query_time": 0.13030052185058594,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 7.674566347068725
+    },
+    {
+      "query_time": 0.002834796905517578,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 352.75895710681243
+    },
+    {
+      "query_time": 0.09082579612731934,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 11.010087911568679
+    },
+    {
+      "query_time": 0.04100680351257324,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 24.386197273176546
+    },
+    {
+      "query_time": 0.35167789459228516,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 2.8435111088211604
+    },
+    {
+      "query_time": 0.048299551010131836,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 20.704126209997877
+    },
+    {
+      "query_time": 0.0016415119171142578,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 609.1944807552651
+    },
+    {
+      "query_time": 0.7892796993255615,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 1.2669779811320356
+    },
+    {
+      "query_time": 0.003919839859008789,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 255.11246274557507
+    },
+    {
+      "query_time": 0.003766775131225586,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 265.47908095449077
+    },
+    {
+      "query_time": 0.21836543083190918,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 4.579479435871736
+    },
+    {
+      "query_time": 0.04869818687438965,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 20.5346454187168
+    },
+    {
+      "query_time": 0.1381058692932129,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 7.240821879024545
+    },
+    {
+      "query_time": 0.046201229095458984,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 21.64444582056125
+    },
+    {
+      "query_time": 0.0034923553466796875,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 286.3397050791917
+    },
+    {
+      "query_time": 0.027087688446044922,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 36.91714049324907
+    },
+    {
+      "query_time": 0.012397289276123047,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 80.66279472287395
+    },
+    {
+      "query_time": 0.010836124420166016,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 92.28391639163917
+    },
+    {
+      "query_time": 0.41019606590270996,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 2.4378585830639814
+    },
+    {
+      "query_time": 0.22316503524780273,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 4.480988694710167
+    },
+    {
+      "query_time": 0.006999015808105469,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 142.87723123041286
+    },
+    {
+      "query_time": 0.0010797977447509766,
+      "recall": 0.9,
+      "precision": 0.9,
+      "f1_score": 0.9,
+      "throughput": 926.099359682049
+    },
+    {
+      "query_time": 0.0031223297119140625,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 320.27367135003055
+    },
+    {
+      "query_time": 0.29353785514831543,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 3.4067156329623365
+    },
+    {
+      "query_time": 0.004481792449951172,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 223.12501329928716
+    },
+    {
+      "query_time": 0.03759479522705078,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 26.599426701504274
+    },
+    {
+      "query_time": 0.0020024776458740234,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 499.38135492320515
+    },
+    {
+      "query_time": 0.006875038146972656,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 145.45373838257734
+    },
+    {
+      "query_time": 0.22613024711608887,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 4.422230164930693
+    },
+    {
+      "query_time": 0.002105712890625,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 474.8985507246377
+    },
+    {
+      "query_time": 0.4312906265258789,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 2.3186221505790052
+    },
+    {
+      "query_time": 0.2573685646057129,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 3.885478405383323
+    },
+    {
+      "query_time": 0.01063084602355957,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 94.06589069052906
+    },
+    {
+      "query_time": 0.599219799041748,
+      "recall": 1.0,
+      "precision": 1.0,
+      "f1_score": 1.0,
+      "throughput": 1.6688367133381874
+    }
+  ]
+}

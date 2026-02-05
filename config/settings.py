@@ -1,5 +1,5 @@
 import os 
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from typing import List
 from functools import lru_cache
 
@@ -17,10 +17,12 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     
-    # Index settings
-    DEFAULT_M: int = 16
-    DEFAULT_M0: int = None
-    DEFAULT_EF_CONSTRUCTION: int = 200
+    # Index settings - Optimized for 10K vector dataset (best configuration)
+    DEFAULT_M: int = 32  # Higher connectivity gives better search efficiency
+    DEFAULT_M0: int = 64  # (2*m)
+    DEFAULT_EF_CONSTRUCTION: int = 300  # Quality vs speed balance
+    DEFAULT_EF_SEARCH: int = 50  # Search parameter for reasonable latency
+    DEFAULT_DISTANCE_METRIC: str = "cosine"
     DEFAULT_N_CLUSTERS: int = 100
     DEFAULT_N_PROBES: int = 10
     

@@ -17,11 +17,18 @@ from models.pydantic_models import (
 )
 from services.vector_service import VectorService
 
+# Import VectorIndexer API
+try:
+    from examples.vector_indexer_api import router as indexer_router
+    INDEXER_AVAILABLE = True
+except ImportError:
+    INDEXER_AVAILABLE = False
+
 # Initialize FastAPI app
 settings = get_settings()
 app = FastAPI(
     title=settings.APP_NAME,
-    description="A production-ready Vector Database API with HNSW and IVF indexing support",
+    description="A production-ready Vector Database API with HNSW, IVF, and Hybrid indexing support. Includes unified VectorIndexer with batch processing and auto-optimization.",
     version=settings.APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -30,7 +37,8 @@ app = FastAPI(
         {"name": "Search", "description": "Vector similarity search"},
         {"name": "Index", "description": "Index management"},
         {"name": "Stats", "description": "Statistics and monitoring"},
-        {"name": "Health", "description": "Health checks"}
+        {"name": "Health", "description": "Health checks"},
+        {"name": "Vector Indexer", "description": "Unified HNSW/IVF Vector Indexer API"}
     ]
 )
 
@@ -82,7 +90,7 @@ async def add_process_time_header(request, call_next):
     Add processing time header
     """
     start_time = time.time()
-    response = await call_next(response=await call_next(request))
+    response = await call_next(request)
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     return response
@@ -252,15 +260,19 @@ async def search_vectors(
     
     - **query_vector**: Query vector
     - **k**: Number of results (1-100)
-    - **method**: Search method (hnsw, brute)
+    - **method**: Search method (hnsw, ivf, brute)
     - **ef_search**: HNSW search parameter
+    - **n_probes**: IVF probes to search
+    - **use_rerank**: IVF rerank for accuracy
     - **filters**: Optional metadata filters
     """
     result = service.search_vectors(
         query_vector=search_data.query_vector,
         k=search_data.k,
         method=search_data.method.value if search_data.method else 'hnsw',
-        ef_search=search_data.ef_search
+        ef_search=search_data.ef_search,
+        n_probes=search_data.n_probes,
+        use_rerank=search_data.use_rerank
     )
     
     if not result["success"]:
@@ -304,7 +316,9 @@ async def batch_search(
             query_vector=query.query_vector,
             k=query.k,
             method=query.method.value if query.method else 'hnsw',
-            ef_search=query.ef_search
+            ef_search=query.ef_search,
+            n_probes=query.n_probes,
+            use_rerank=query.use_rerank
         )
         results.append({
             "query_index": i,
@@ -428,6 +442,17 @@ async def root():
         "docs": "/docs",
         "health": "/health"
     }
+
+# ==================== VectorIndexer Routes ====================
+
+# Include VectorIndexer routes if available
+if INDEXER_AVAILABLE:
+    app.include_router(indexer_router)
+    logger.info("✅ VectorIndexer API routes successfully integrated")
+    logger.info("   Endpoints available at: /api/indexer/*")
+    logger.info("   See /docs for complete API documentation")
+else:
+    logger.warning("⚠️ VectorIndexer API not available - using standard Vector API only")
 
 if __name__ == "__main__":
     import uvicorn

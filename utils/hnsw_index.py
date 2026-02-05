@@ -36,8 +36,9 @@ class HNSWIndex:
     - Adjustable parameters for recall/speed tradeoff
     """
     
-    def __init__(self, m: int = 16, m0: int = None, ef_construction: int = 200, 
-                 level_mult: float = 1.0 / np.log(2.0)):
+    def __init__(self, m: int = 16, m0: int = None, ef_construction: int = 200,
+                 level_mult: float = 1.0 / np.log(2.0),
+                 distance_metric: str = "cosine"):
         """
         Initialize HNSW index
         
@@ -46,11 +47,13 @@ class HNSWIndex:
             m0: Number of neighbors in layer 0 (default: 2*m)
             ef_construction: Search breadth during construction (higher = better quality, slower)
             level_mult: Multiplier for level generation (controls height distribution)
+            distance_metric: Distance metric to use (cosine or euclidean)
         """
         self.m = m
         self.m0 = m0 if m0 is not None else 2 * m
         self.ef_construction = ef_construction
         self.level_mult = level_mult
+        self.distance_metric = distance_metric
         
         # Graph structure
         self.graph: Dict[str, Node] = {}
@@ -83,17 +86,29 @@ class HNSWIndex:
         
         return level
     
+    def _normalize_vector(self, vector: np.ndarray) -> np.ndarray:
+        if self.distance_metric != "cosine":
+            return vector
+
+        norm = np.linalg.norm(vector)
+        if norm == 0:
+            return vector
+        return vector / norm
+
     def _distance(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """
-        Calculate Euclidean distance between two vectors
+        Calculate distance between two vectors
         
         Args:
             vec1: First vector
             vec2: Second vector
             
         Returns:
-            Euclidean distance
+            Distance between vectors
         """
+        if self.distance_metric == "cosine":
+            return 1.0 - float(np.dot(vec1, vec2))
+
         return float(np.linalg.norm(vec1 - vec2))
     
     def _search_layer(self, query_vector: np.ndarray, ef: int, 
@@ -277,6 +292,7 @@ class HNSWIndex:
         """
         # Create node
         vector_array = np.array(vector, dtype=np.float32)
+        vector_array = self._normalize_vector(vector_array)
         
         # Determine level if not provided
         if level is None:
@@ -343,6 +359,7 @@ class HNSWIndex:
             List of search results with distances and metadata
         """
         query_array = np.array(query_vector, dtype=np.float32)
+        query_array = self._normalize_vector(query_array)
         
         if len(self.graph) == 0:
             return []
@@ -557,6 +574,7 @@ class HNSWIndex:
             "m0": self.m0,
             "ef_construction": self.ef_construction,
             "level_mult": self.level_mult,
+            "distance_metric": self.distance_metric,
             "entry_point": self.entry_point,
             "max_level": self.max_level,
             "total_inserted": self.total_inserted,
@@ -586,15 +604,18 @@ class HNSWIndex:
         self.m0 = index_data["m0"]
         self.ef_construction = index_data["ef_construction"]
         self.level_mult = index_data["level_mult"]
+        self.distance_metric = index_data.get("distance_metric", self.distance_metric)
         self.entry_point = index_data["entry_point"]
         self.max_level = index_data["max_level"]
         self.total_inserted = index_data["total_inserted"]
         
         # Rebuild graph
         for node_id, node_data in index_data["graph"].items():
+            vector_array = np.array(node_data["vector"], dtype=np.float32)
+            vector_array = self._normalize_vector(vector_array)
             node = Node(
                 node_id=node_data["node_id"],
-                vector=np.array(node_data["vector"], dtype=np.float32)
+                vector=vector_array
             )
             node.neighbors = {int(k): v for k, v in node_data["neighbors"].items()}
             self.graph[node_id] = node

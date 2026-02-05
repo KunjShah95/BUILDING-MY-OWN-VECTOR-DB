@@ -432,14 +432,33 @@ class IVFIndex:
         Args:
             filepath: Path to save the index
         """
+        # Helper function to convert numpy types to Python native types for JSON serialization
+        def convert_numpy_types(obj):
+            """Recursively convert numpy types to Python native types"""
+            if isinstance(obj, dict):
+                return {str(k): convert_numpy_types(v) for k, v in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [convert_numpy_types(item) for item in obj]
+            elif isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            return obj
+        
+        # Convert numpy int64 keys and values to serializable types
+        inverted_file_serializable = {str(k): convert_numpy_types(v) for k, v in self.inverted_file.items()}
+        residuals_serializable = convert_numpy_types(self.residuals)
+        
         index_data = {
             "n_clusters": self.n_clusters,
             "n_probes": self.n_probes,
             "coarse_centroids": self.coarse_quantizer.centroids.tolist() if self.coarse_quantizer.centroids is not None else None,
             "codebooks": [codebook.tolist() for codebook in self.fine_quantizer.codebooks] if self.fine_quantizer.codebooks else None,
-            "inverted_file": dict(self.inverted_file),
+            "inverted_file": inverted_file_serializable,
             "vectors": {k: v.tolist() for k, v in self.vectors.items()},
-            "residuals": self.residuals,
+            "residuals": residuals_serializable,
             "metadata": self.metadata,
             "vector_ids": self.vector_ids,
             "is_trained": self.is_trained

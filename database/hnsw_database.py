@@ -85,20 +85,31 @@ class HNSWVectorDatabase:
                 "message": f"Error inserting vector batch: {str(e)}"
             }
     
-    def create_hnsw_index(self, m: int = 16, m0: int = None, 
-                         ef_construction: int = 200) -> Dict[str, Any]:
+    def create_hnsw_index(self, m: int = None, m0: int = None, 
+                         ef_construction: int = None) -> Dict[str, Any]:
         """
-        Create an HNSW index
+        Create an HNSW index with optimized parameters
         
         Args:
-            m: Number of neighbors per node
-            m0: Number of neighbors in layer 0
-            ef_construction: Construction parameter
+            m: Number of neighbors per node (default from settings)
+            m0: Number of neighbors in layer 0 (default: 2*m)
+            ef_construction: Construction parameter (default from settings)
             
         Returns:
             Index creation result
         """
         try:
+            # Use optimized settings if parameters not provided
+            from config.settings import get_settings
+            settings = get_settings()
+            
+            if m is None:
+                m = settings.DEFAULT_M
+            if ef_construction is None:
+                ef_construction = settings.DEFAULT_EF_CONSTRUCTION
+            if m0 is None:
+                m0 = settings.DEFAULT_M0
+            
             # Get all vectors from database
             vectors_data = self.vector_model.get_all_vectors()
             
@@ -110,9 +121,10 @@ class HNSWVectorDatabase:
             
             # Create HNSW index
             self.hnsw_index = HNSWIndex(
-                m=m, 
-                m0=m0, 
-                ef_construction=ef_construction
+                m=m,
+                m0=m0,
+                ef_construction=ef_construction,
+                distance_metric=settings.DEFAULT_DISTANCE_METRIC
             )
             
             # Insert all vectors
@@ -128,8 +140,13 @@ class HNSWVectorDatabase:
             
             return {
                 "success": True,
-                "message": f"HNSW Index created",
-                "stats": stats
+                "message": f"HNSW Index created with m={m}, ef_construction={ef_construction}",
+                "stats": stats,
+                "parameters": {
+                    "m": m,
+                    "m0": m0,
+                    "ef_construction": ef_construction
+                }
             }
         except Exception as e:
             return {
@@ -177,7 +194,9 @@ class HNSWVectorDatabase:
                     "message": f"HNSW Index file not found: {self.hnsw_index_path}"
                 }
             
-            self.hnsw_index = HNSWIndex()
+            from config.settings import get_settings
+            settings = get_settings()
+            self.hnsw_index = HNSWIndex(distance_metric=settings.DEFAULT_DISTANCE_METRIC)
             self.hnsw_index.load(self.hnsw_index_path)
             
             stats = self.hnsw_index.get_graph_stats()
@@ -196,15 +215,15 @@ class HNSWVectorDatabase:
     def search_hnsw(self, query_vector: List[float], k: int = 5, 
                    ef_search: int = None) -> Dict[str, Any]:
         """
-        Search using HNSW index
+        Search using HNSW index with optimized parameters
         
         Args:
             query_vector: Query vector
             k: Number of results to return
-            ef_search: Search parameter (higher = better recall)
+            ef_search: Search parameter (higher = better recall, lower = faster)
             
         Returns:
-            Search results
+            Search results with timing information
         """
         try:
             if self.hnsw_index is None:
@@ -212,6 +231,11 @@ class HNSWVectorDatabase:
                     "success": False,
                     "message": "No HNSW index created yet"
                 }
+            
+            # Use optimized ef_search if not specified
+            from config.settings import get_settings
+            if ef_search is None:
+                ef_search = get_settings().DEFAULT_EF_SEARCH
             
             start_time = time.time()
             results = self.hnsw_index.search(query_vector, k, ef=ef_search)
@@ -223,6 +247,7 @@ class HNSWVectorDatabase:
                 "results": results,
                 "total_results": len(results),
                 "search_time": search_time,
+                "ef_search": ef_search,
                 "method": "hnsw"
             }
         except Exception as e:
@@ -404,15 +429,64 @@ class HNSWVectorDatabase:
                 "message": f"Error getting index info: {str(e)}"
             }
     
-    def rebuild_hnsw_index(self, m: int = 16, m0: int = None, 
-                          ef_construction: int = 200) -> Dict[str, Any]:
+    def batch_search_hnsw(self, query_vectors: List[List[float]], k: int = 5, 
+                         ef_search: int = None) -> Dict[str, Any]:
         """
-        Rebuild HNSW index
+        Perform batch searches using HNSW index
         
         Args:
-            m: Number of neighbors per node
+            query_vectors: List of query vectors
+            k: Number of results to return per query
+            ef_search: Search parameter
+            
+        Returns:
+            Batch search results with timing
+        """
+        try:
+            if self.hnsw_index is None:
+                return {
+                    "success": False,
+                    "message": "No HNSW index created yet"
+                }
+            
+            from config.settings import get_settings
+            if ef_search is None:
+                ef_search = get_settings().DEFAULT_EF_SEARCH
+            
+            start_time = time.time()
+            batch_results = []
+            
+            for query_vec in query_vectors:
+                results = self.hnsw_index.search(query_vec, k, ef=ef_search)
+                batch_results.append(results)
+            
+            batch_time = time.time() - start_time
+            
+            return {
+                "success": True,
+                "total_queries": len(query_vectors),
+                "results": batch_results,
+                "batch_time": batch_time,
+                "avg_query_time": batch_time / len(query_vectors) if query_vectors else 0,
+                "queries_per_second": len(query_vectors) / batch_time if batch_time > 0 else 0,
+                "ef_search": ef_search,
+                "method": "hnsw_batch"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error during batch HNSW search: {str(e)}"
+            }
+    
+    def rebuild_hnsw_index(self, m: int = None, m0: int = None, 
+                          ef_construction: int = None) -> Dict[str, Any]:
+        """
+        Rebuild HNSW index with optimized parameters
+        
+        Args:
+            m: Number of neighbors per node (default from settings)
             m0: Number of neighbors in layer 0
-            ef_construction: Construction parameter
+            ef_construction: Construction parameter (default from settings)
             
         Returns:
             Rebuild result

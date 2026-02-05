@@ -70,6 +70,8 @@ class SearchRequest(BaseModel):
     k: int = Field(5, description="Number of results", ge=1, le=100)
     method: SearchMethod = Field(SearchMethod.HNSW, description="Search method")
     ef_search: Optional[int] = Field(None, description="HNSW search parameter", ge=1)
+    n_probes: Optional[int] = Field(None, description="IVF probes to search", ge=1)
+    use_rerank: Optional[bool] = Field(True, description="IVF: rerank results for accuracy")
     filters: Optional[Dict[str, Any]] = Field(None, description="Optional metadata filters")
 
 class SearchResult(BaseModel):

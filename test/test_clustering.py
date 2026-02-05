@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from utils.clustering import Kmeans,VectorIndexer
+from utils.clustering import KMeans, VectorIndexer
 def test_kmeans_basic():
     "Test basic K-Means Functionality"
 
@@ -14,10 +14,10 @@ def test_kmeans_basic():
         [11, 10],
         [11, 11]
     ])
-    kmeans = Kmeans(k=2)
+    kmeans = KMeans(k=2)
     kmeans.fit(data)
-    assert len(kmeans.cluster_centers_) == 2
-    assert kmeans.labels_.shape[0] == data.shape[0]
+    assert len(kmeans.get_cluster_centers()) == 2
+    assert kmeans.get_labels().shape[0] == data.shape[0]
 
 def test_vector_indexer():
     "Test K-Means prediction"

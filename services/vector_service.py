@@ -48,6 +48,14 @@ class VectorService:
                     vector.vector_id,
                     metadata
                 )
+
+            # Add to IVF index if it exists and is trained
+            if self.ivf_db.ivf_index is not None and self.ivf_db.ivf_index.is_trained:
+                self.ivf_db.ivf_index.add(
+                    vector_data,
+                    vector.vector_id,
+                    metadata
+                )
             
             logger.info(f"Created vector: {vector.vector_id}")
             
@@ -86,6 +94,15 @@ class VectorService:
             if self.hnsw_db.hnsw_index is not None:
                 for vector_data in vectors:
                     self.hnsw_db.hnsw_index.insert(
+                        vector_data["vector"],
+                        vector_data["vector_id"],
+                        vector_data.get("metadata")
+                    )
+
+            # Add to IVF index if it exists and is trained
+            if self.ivf_db.ivf_index is not None and self.ivf_db.ivf_index.is_trained:
+                for vector_data in vectors:
+                    self.ivf_db.ivf_index.add(
                         vector_data["vector"],
                         vector_data["vector_id"],
                         vector_data.get("metadata")
@@ -219,6 +236,10 @@ class VectorService:
                 # Delete from HNSW index if it exists
                 if self.hnsw_db.hnsw_index is not None:
                     self.hnsw_db.hnsw_index.delete(vector_id)
+
+                # Delete from IVF index if it exists
+                if self.ivf_db.ivf_index is not None:
+                    self.ivf_db.ivf_index.delete_vector(vector_id)
                 
                 logger.info(f"Deleted vector: {vector_id}")
                 
@@ -242,7 +263,9 @@ class VectorService:
     
     def search_vectors(self, query_vector: List[float], k: int = 5,
                       method: str = 'hnsw', 
-                      ef_search: Optional[int] = None) -> Dict[str, Any]:
+                      ef_search: Optional[int] = None,
+                      n_probes: Optional[int] = None,
+                      use_rerank: Optional[bool] = True) -> Dict[str, Any]:
         """
         Search for similar vectors
         
@@ -260,6 +283,19 @@ class VectorService:
             
             if method == 'hnsw':
                 result = self.hnsw_db.search_hnsw(query_vector, k, ef_search)
+            elif method == 'ivf':
+                effective_n_probes = (
+                    n_probes
+                    if n_probes is not None
+                    else (self.ivf_db.ivf_index.n_probes if self.ivf_db.ivf_index else 10)
+                )
+                result = self.ivf_db.search(
+                    query_vector,
+                    k,
+                    use_ivf=True,
+                    use_rerank=use_rerank,
+                    n_probes=effective_n_probes
+                )
             elif method == 'brute':
                 result = self.hnsw_db.search_brute_force(query_vector, k)
             else:
@@ -458,7 +494,7 @@ class VectorService:
         """
         try:
             total_vectors = self.vector_model.get_vector_count()
-            index_available = self.hnsw_db.hnsw_index is not None
+            index_available = self.hnsw_db.hnsw_index is not None or self.ivf_db.ivf_index is not None
             
             return {
                 "status": "healthy" if total_vectors >= 0 else "unhealthy",
