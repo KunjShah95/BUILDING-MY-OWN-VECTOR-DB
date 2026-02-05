@@ -524,15 +524,32 @@ class HNSWIndex:
         Args:
             filepath: Path to save the index
         """
+        # Helper function to make objects JSON serializable
+        def make_serializable(obj):
+            if obj is None:
+                return None
+            if isinstance(obj, (str, int, float, bool)):
+                return obj
+            if isinstance(obj, (list, tuple)):
+                return [make_serializable(item) for item in obj]
+            if isinstance(obj, dict):
+                return {str(k): make_serializable(v) for k, v in obj.items()}
+            # Convert other types to string
+            return str(obj)
+        
         # Convert graph to serializable format
         graph_data = {}
         
         for node_id, node in self.graph.items():
+            # Convert metadata to serializable format
+            metadata = self.metadata.get(node_id)
+            serializable_metadata = make_serializable(metadata) if metadata else None
+            
             graph_data[node_id] = {
                 "node_id": node.node_id,
                 "vector": node.vector.tolist(),
-                "neighbors": node.neighbors,
-                "metadata": self.metadata.get(node_id)
+                "neighbors": {str(k): v for k, v in node.neighbors.items()},
+                "metadata": serializable_metadata
             }
         
         index_data = {

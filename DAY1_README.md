@@ -10,7 +10,7 @@ Building a custom vector database from scratch using PostgreSQL and Python. This
 
 ### 1. **Project Structure**
 
-```
+```text
 BUILDING MY OWN VECTOR DB/
 ├── main.py                      # Entry point and demo usage
 ├── requirements.txt             # Dependencies
@@ -234,7 +234,7 @@ db.close()
 
 ## 📦 Dependencies
 
-```
+```text
 psycopg2-binary>=2.9.9      # PostgreSQL driver
 numpy>=1.26.0                # Numerical operations
 fastapi==0.104.1             # Web framework
