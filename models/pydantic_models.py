@@ -137,3 +137,38 @@ class HealthResponse(BaseModel):
     database: str
     index_available: bool
     total_vectors: int
+
+
+class ApiTemplateCreate(BaseModel):
+    """Model for API playground templates"""
+    name: str = Field(..., description="Template name")
+    description: Optional[str] = Field(None, description="Optional description")
+    method: str = Field(..., description="HTTP method", example="POST")
+    path: str = Field(..., description="API path", example="/search")
+    payload: Dict[str, Any] = Field(..., description="JSON payload")
+
+
+class ApiTemplateResponse(BaseModel):
+    """Template response model"""
+    success: bool
+    template: Dict[str, Any]
+
+
+class ApiTemplateListResponse(BaseModel):
+    """Template list response model"""
+    success: bool
+    templates: List[Dict[str, Any]]
+
+
+class FeedbackCreate(BaseModel):
+    """Model for feedback submission"""
+    name: Optional[str] = Field(None, description="User name")
+    email: Optional[str] = Field(None, description="User email")
+    rating: Optional[int] = Field(None, description="Rating 1-5", ge=1, le=5)
+    message: str = Field(..., description="Feedback message")
+
+
+class FeedbackResponse(BaseModel):
+    """Feedback response model"""
+    success: bool
+    feedback: Dict[str, Any]

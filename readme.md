@@ -880,6 +880,16 @@ docker run -p 8000:8000 \
   vector-db:latest
 ```
 
+### Environment Variables (Deploy)
+
+Copy [.env.example](.env.example) to `.env` for local dev, or set these in your deploy platform:
+
+- `DATABASE_URL` (required)
+- `PORT` (optional, default 8000)
+- `UVICORN_WORKERS` (optional, default 4)
+- `DEBUG` (optional)
+- `ALLOWED_HOSTS` (optional, comma-separated)
+
 ### Services Included
 
 - 🐍 **Vector API** (Port 8000)
