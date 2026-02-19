@@ -150,7 +150,7 @@ python -m uvicorn api.main:app --reload
 
 ```mermaid
 graph TB
-    Client["🌐 Client"]
+    Client["Client"]
     API["FastAPI Application"]
     
     subgraph Endpoints["API Endpoints"]
@@ -210,7 +210,7 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant Client as 🌐 Client
+    participant Client as Client
     participant API as FastAPI
     participant Service as VectorService
     participant Indexer as Indexer (HNSW/IVF)
@@ -341,14 +341,14 @@ stateDiagram-v2
 ```mermaid
 graph TB
     subgraph Client["Client / User"]
-        Browser["🌐 Browser<br/>REST Client"]
+        Browser["Browser<br/>REST Client"]
     end
     
     subgraph Network["Network Layer"]
         LB["Load Balancer"]
     end
     
-    subgraph Docker["🐳 Docker Containers"]
+    subgraph Docker["Docker Containers"]
         subgraph API["API Service"]
             FastAPI["FastAPI App<br/>Port 8000"]
         end
@@ -453,7 +453,7 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph Latency["⚡ Query Latency (ms)<br/>Lower is Better"]
+    subgraph Latency["Query Latency (ms)<br/>Lower is Better"]
         L1["Brute Force<br/>45.2ms"]
         L2["IVF<br/>4.5ms"]
         L3["HNSW m=32<br/>5.1ms"]
@@ -461,7 +461,7 @@ graph LR
         L5["HNSW m=8<br/>2.1ms"]
     end
     
-    subgraph Recall["📊 Recall@10<br/>Higher is Better"]
+    subgraph Recall["Recall@10<br/>Higher is Better"]
         R1["Brute Force<br/>100%"]
         R2["HNSW m=32<br/>99.2%"]
         R3["HNSW m=16<br/>98.5%"]
@@ -469,7 +469,7 @@ graph LR
         R5["HNSW m=8<br/>95.2%"]
     end
     
-    subgraph Throughput["🚀 Queries/Second<br/>Higher is Better"]
+    subgraph Throughput["Queries/Second<br/>Higher is Better"]
         T1["HNSW m=8<br/>450 qps"]
         T2["HNSW m=16<br/>320 qps"]
         T3["IVF<br/>220 qps"]
@@ -512,16 +512,16 @@ graph LR
 
 ```mermaid
 graph LR
-    Start["🚀 Initial State<br/>Before Optimization"]
+    Start("Initial State<br/>Before Optimization")
     
-    Step1["📊 Benchmark Analysis<br/>Identified bottlenecks"]
-    Step2["⚙️ Tune Parameters<br/>m=32, ef=300"]
-    Step3["🔄 Batch Search Support<br/>10-100x improvement"]
-    Step4["⚡ Optimize ef_search<br/>Tuned to 50"]
-    Step5["✅ Final State<br/>After Optimization"]
+    Step1("Benchmark Analysis<br/>Identified bottlenecks")
+    Step2("Tune Parameters<br/>m=32, ef=300")
+    Step3("Batch Search Support<br/>10-100x improvement")
+    Step4("Optimize ef_search<br/>Tuned to 50")
+    Step5("Final State<br/>After Optimization")
     
-    Metrics1["Before:<br/>2.72 qps<br/>276ms<br/>33% recall"]
-    Metrics2["After:<br/>4.47 qps<br/>124ms<br/>95% recall"]
+    Metrics1("Before:<br/>2.72 qps<br/>276ms<br/>33% recall")
+    Metrics2("After:<br/>4.47 qps<br/>124ms<br/>95% recall")
     
     Start -->|Measure| Step1
     Step1 -->|Tune Params| Step2
