@@ -1,8 +1,16 @@
 # Vector Database - Production Ready 🚀
 
+[![GitHub Stars](https://img.shields.io/github/stars/KunjShah95/BUILDING-MY-OWN-VECTOR-DB?style=flat-square)](https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB)
+[![GitHub Forks](https://img.shields.io/github/forks/KunjShah95/BUILDING-MY-OWN-VECTOR-DB?style=flat-square)](https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB/blob/main/LICENSE)
+
 A **production-ready Vector Database** built from scratch with Python, featuring high-performance **HNSW** and **IVF** indexing algorithms backed by **PostgreSQL**.
 
 > Built as a comprehensive learning project demonstrating advanced vector indexing, database design, and performance optimization techniques. Fully tested, benchmarked, and production-ready for deployment.
+
+---
+
+[GitHub](https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB) · [Documentation](https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB/blob/main/docs/ivf_vector_search_guide.md) · [Report Bug](https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB/issues) · [Request Feature](https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB/issues)
 
 ---
 
@@ -107,7 +115,7 @@ python -m uvicorn api.main:app --reload
 
 ### System Overview (ASCII)
 
-diagram
+```
 ┌─────────────────────────────────────────────────┐
 │           FastAPI Application (api/)             │
 │  ├── Vector CRUD endpoints                       │
@@ -136,7 +144,6 @@ diagram
 │  ├── Vector ORM models (schema.py)             │
 │  └── Database wrappers                         │
 └─────────────────────────────────────────────────┘
-
 ```
 
 ### Architecture Diagram (Mermaid)
@@ -994,7 +1001,7 @@ For issues, questions, or suggestions:
 1. Check existing documentation in DAY1-DAY7 README files
 2. Review test cases in `test/` directory for usage examples
 3. Check `examples/` directory for complete code samples
-4. Consult [HNSW_OPTIMIZATION_GUIDE.md](HNSW_OPTIMIZATION_GUIDE.md) for performance tuning
+
 
 ---
 
