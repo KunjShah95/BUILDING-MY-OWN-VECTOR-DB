@@ -437,7 +437,7 @@ graph TB
 
 ---
 
-## � Performance Benchmarks
+## ⚡ Performance Benchmarks
 
 ### Results on 10,000 Vectors (128 dimensions, k=10)
 
