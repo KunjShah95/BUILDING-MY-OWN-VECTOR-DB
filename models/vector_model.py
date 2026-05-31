@@ -139,11 +139,14 @@ class VectorModel:
         """
         return self.db.query(Vector).filter(Vector.id == vector_id).first()
     
-    def get_all_vectors(self, limit: int = 1000, offset: int = 0) -> List[Vector]:
+    def get_all_vectors(self, limit: Optional[int] = 1000, offset: int = 0) -> List[Vector]:
         """
         Get all vectors with pagination
         """
-        return self.db.query(Vector).offset(offset).limit(limit).all()
+        query = self.db.query(Vector).offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def get_vectors_by_collection(self, collection_id: str) -> List[Vector]:
         """Get all vectors belonging to a collection."""
@@ -238,7 +241,7 @@ class VectorModel:
         if collection_id:
             vectors = self.get_vectors_by_collection(collection_id)
         else:
-            vectors = self.get_all_vectors()
+            vectors = self.get_all_vectors(limit=None)
 
         results = []
         
