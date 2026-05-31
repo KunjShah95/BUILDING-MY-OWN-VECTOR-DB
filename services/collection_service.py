@@ -1,5 +1,7 @@
 import re
 import uuid
+import shutil
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session
 from config.settings import get_settings
 from database.schema import Collection, Vector
 from services.embedding_service import default_model_for_modality, expected_dimension
+from utils.index_paths import get_index_dir
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -129,6 +132,11 @@ class CollectionService:
                 self.db.query(Vector).filter(Vector.collection_id == slug).delete()
             )
             self.db.delete(record)
+
+            index_dir = Path(get_index_dir(slug))
+            if index_dir.exists() and index_dir.is_dir():
+                shutil.rmtree(index_dir)
+
             self.db.commit()
 
             return {

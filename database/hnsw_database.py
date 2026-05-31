@@ -134,7 +134,7 @@ class HNSWVectorDatabase:
             if collection_id:
                 vectors_data = self.vector_model.get_vectors_by_collection(collection_id)
             else:
-                vectors_data = self.vector_model.get_all_vectors()
+                vectors_data = self.vector_model.get_all_vectors(limit=None)
 
             if len(vectors_data) == 0:
                 scope = f"collection '{collection_id}'" if collection_id else "database"
@@ -248,12 +248,23 @@ class HNSWVectorDatabase:
         if not filters:
             return results[:k]
 
+        vector_ids = [item.get("vector_id") for item in results if item.get("vector_id")]
+        if not vector_ids:
+            return []
+
+        vectors = (
+            self.db_session.query(Vector)
+            .filter(Vector.vector_id.in_(vector_ids))
+            .all()
+        )
+        vector_map = {vector.vector_id: vector for vector in vectors}
+
         filtered = []
         for item in results:
             vector_id = item.get("vector_id")
             if not vector_id:
                 continue
-            vector = self.vector_model.get_vector(vector_id)
+            vector = vector_map.get(vector_id)
             if vector and self.vector_model._metadata_matches(vector.meta_data, filters):
                 if "metadata" not in item:
                     item["metadata"] = vector.meta_data
