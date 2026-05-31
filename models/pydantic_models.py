@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
@@ -92,6 +92,9 @@ class SearchResponse(BaseModel):
 class IndexCreate(BaseModel):
     """Model for creating an index"""
     method: SearchMethod = Field(SearchMethod.HNSW, description="Indexing method")
+    collection_id: Optional[str] = Field(
+        None, description="Scope index to a collection (recommended for multimodal)"
+    )
     m: int = Field(16, description="HNSW: Number of neighbors", ge=1, le=256)
     m0: Optional[int] = Field(None, description="HNSW: Neighbors in layer 0", ge=1)
     ef_construction: int = Field(200, description="HNSW: Construction parameter", ge=1)
@@ -172,3 +175,97 @@ class FeedbackResponse(BaseModel):
     """Feedback response model"""
     success: bool
     feedback: Dict[str, Any]
+
+
+class Modality(str, Enum):
+    """Supported collection modalities."""
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    MULTIMODAL = "multimodal"
+
+
+class CollectionCreate(BaseModel):
+    """Model for creating a collection."""
+    name: str = Field(..., description="Human-readable collection name")
+    collection_id: Optional[str] = Field(
+        None, description="Unique slug (auto-generated from name if omitted)"
+    )
+    description: Optional[str] = Field(None, description="Optional description")
+    modality: Modality = Field(Modality.TEXT, description="Primary modality")
+    embedding_model: Optional[str] = Field(
+        None, description="Embedding model id (defaults from settings)"
+    )
+    dimension: Optional[int] = Field(
+        None, description="Vector dimension (auto from modality if omitted)", ge=1
+    )
+    distance_metric: DistanceMetric = Field(
+        DistanceMetric.COSINE, description="Distance metric for search"
+    )
+
+    @model_validator(mode="after")
+    def apply_modality_defaults(self):
+        from services.embedding_service import expected_dimension, default_model_for_modality
+
+        modality_val = self.modality.value if self.modality else "text"
+        if self.dimension is None:
+            object.__setattr__(
+                self,
+                "dimension",
+                expected_dimension(modality_val, self.embedding_model),
+            )
+        if self.embedding_model is None:
+            object.__setattr__(
+                self,
+                "embedding_model",
+                default_model_for_modality(modality_val),
+            )
+        return self
+
+
+class CollectionResponse(BaseModel):
+    """Collection API response."""
+    success: bool
+    collection: Optional[Dict[str, Any]] = None
+    collections: Optional[List[Dict[str, Any]]] = None
+    message: Optional[str] = None
+    count: Optional[int] = None
+
+
+class TextIngestRequest(BaseModel):
+    """Ingest raw text into a collection (auto-embedded)."""
+    text: str = Field(..., description="Text to embed and store", min_length=1)
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Extra metadata")
+    vector_id: Optional[str] = Field(None, description="Optional custom vector id")
+
+
+class TextSearchRequest(BaseModel):
+    """Natural-language search within a collection."""
+    query: str = Field(..., description="Search query text", min_length=1)
+    k: int = Field(5, description="Number of results", ge=1, le=100)
+    method: SearchMethod = Field(
+        SearchMethod.BRUTE,
+        description="Search method (brute recommended for collection scope)",
+    )
+    ef_search: Optional[int] = Field(None, description="HNSW search parameter", ge=1)
+    n_probes: Optional[int] = Field(None, description="IVF probes", ge=1)
+    use_rerank: Optional[bool] = Field(True, description="IVF rerank flag")
+    filters: Optional[Dict[str, Any]] = Field(None, description="Metadata filters")
+
+
+class MediaSearchParams(BaseModel):
+    """Shared search parameters for multipart image/audio query uploads."""
+    k: int = Field(5, ge=1, le=100)
+    method: SearchMethod = Field(SearchMethod.BRUTE)
+    ef_search: Optional[int] = Field(None, ge=1)
+    n_probes: Optional[int] = Field(None, ge=1)
+    use_rerank: Optional[bool] = True
+    filters: Optional[Dict[str, Any]] = None
+
+
+class MediaIngestResponse(BaseModel):
+    """Response shape for media ingest endpoints."""
+    success: bool
+    vector_id: Optional[str] = None
+    message: Optional[str] = None
+    vector: Optional[Dict[str, Any]] = None

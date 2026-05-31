@@ -38,6 +38,7 @@ A **production-ready Vector Database** built from scratch with Python, featuring
 - ✅ **Complete CRUD Operations**: Add, read, update, and delete vectors
 - ✅ **Batch Operations**: Efficient bulk vector insertion and search
 - ✅ **Multiple Search Methods**: HNSW, IVF, and brute force comparison
+- ✅ **Collections & Text Ingest**: Auto-embed text into scoped collections (multimodal foundation)
 
 ### Advanced Features
 
@@ -724,6 +725,134 @@ response = requests.delete("http://localhost:8000/index")
 print(response.json())
 ```
 
+### Collections & Text Ingest (Multimodal Phase 1)
+
+Collections group vectors by modality and embedding model. Text can be ingested without pre-computing embeddings.
+
+**Create a collection** — `POST /collections`
+
+```python
+import requests
+
+BASE = "http://localhost:8000"
+col = requests.post(f"{BASE}/collections", json={
+    "name": "Product docs",
+    "collection_id": "product-docs",
+    "modality": "text",
+    "dimension": 384,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+}).json()
+print(col["collection"]["collection_id"])
+```
+
+**Ingest text** — `POST /collections/{collection_id}/ingest/text`
+
+```python
+requests.post(f"{BASE}/collections/product-docs/ingest/text", json={
+    "text": "Returns are accepted within 30 days with receipt.",
+    "metadata": {"source": "policy"},
+    "vector_id": "policy-returns",
+})
+```
+
+**Search by natural language** — `POST /collections/{collection_id}/search/text`
+
+```python
+hits = requests.post(f"{BASE}/collections/product-docs/search/text", json={
+    "query": "how do I return an item?",
+    "k": 5,
+    "method": "brute",
+}).json()
+for row in hits["results"]:
+    print(row["vector_id"], row["distance"], row.get("metadata", {}).get("text"))
+```
+
+**List / get / delete** — `GET /collections`, `GET /collections/{id}`, `DELETE /collections/{id}`
+
+> **Note:** Collection-scoped search filters by `collection_id` in PostgreSQL (brute force over the subset). Global HNSW/IVF indexes are not partitioned per collection yet; build indexes on all vectors or use `method: brute` for collection queries.
+
+Install embeddings: `pip install 'sentence-transformers>=2.2.0,<3.0.0'`. Configure via `DEFAULT_EMBEDDING_MODEL`, `EMBEDDING_DEVICE`, and `MEDIA_STORAGE_PATH` in `.env`.
+
+### Image & Audio (Multimodal Phase 3)
+
+**Image collection** (CLIP `clip-ViT-B-32`, 512-dim by default):
+
+```python
+requests.post(f"{BASE}/collections", json={
+    "name": "Product photos",
+    "collection_id": "product-photos",
+    "modality": "image",
+    "dimension": 512,
+})
+
+with open("shirt.jpg", "rb") as f:
+    requests.post(
+        f"{BASE}/collections/product-photos/ingest/image",
+        files={"file": ("shirt.jpg", f, "image/jpeg")},
+        data={"metadata": '{"sku": "A1"}', "vector_id": "sku-a1"},
+    )
+
+with open("query.jpg", "rb") as f:
+    hits = requests.post(
+        f"{BASE}/collections/product-photos/search/image",
+        files={"file": ("query.jpg", f, "image/jpeg")},
+        data={"k": 5, "method": "brute"},
+    ).json()
+```
+
+**Audio collection** (librosa MFCC mean-pool, 128-dim — CPU-friendly, not wav2vec2):
+
+```python
+requests.post(f"{BASE}/collections", json={
+    "name": "Voice clips",
+    "collection_id": "voice-clips",
+    "modality": "audio",
+    "dimension": 128,
+})
+
+with open("clip.wav", "rb") as f:
+    requests.post(
+        f"{BASE}/collections/voice-clips/ingest/audio",
+        files={"file": ("clip.wav", f, "audio/wav")},
+    )
+```
+
+**Multimodal collection** (`modality: multimodal`, dimension 512): shared CLIP space for text + image ingest. Audio ingest is not supported in multimodal collections (use an `audio` collection).
+
+Environment knobs: `DEFAULT_IMAGE_MODEL`, `DEFAULT_AUDIO_MODEL`, `DEFAULT_IMAGE_DIMENSION`, `DEFAULT_AUDIO_DIMENSION`, `MEDIA_STORAGE_PATH`, `AUDIO_SAMPLE_RATE`, `AUDIO_MAX_DURATION_SEC`.
+
+### Python SDK
+
+```bash
+pip install -e sdk
+```
+
+```python
+from vector_db_client import VectorDBClient
+
+client = VectorDBClient("http://localhost:8000")
+client.collections.create(
+    name="Photos", collection_id="photos", modality="image", dimension=512
+)
+client.multimodal.ingest_image("photos", path="cat.jpg")
+print(client.multimodal.search_text("docs", "returns policy"))  # text collections
+client.close()
+```
+
+See `sdk/README.md` for the full client API.
+
+### Roadmap / What more can be worked upon
+
+- Per-collection HNSW indexes (**implemented** — `POST /collections/{id}/index`, on-disk under `indexes/{id}/`; per-collection IVF still TODO)
+- Cross-modal CLIP text→image search quality tuning and unified multimodal audio
+- Long-audio chunking and segment-level vectors
+- Object storage (S3/Azure Blob) instead of local `MEDIA_STORAGE_PATH`
+- Async ingest job queue for large uploads
+- gRPC / GraphQL APIs alongside REST
+- SQL/metadata filters (JSONB), hybrid dense + sparse search
+- Vector quantization and int8 indexes for scale
+- Multi-tenant auth, API keys per collection, rate limits
+
 ### System Operations
 
 #### **Get Statistics**
@@ -815,6 +944,11 @@ DEFAULT_EF_SEARCH=50
 # IVF Index Defaults
 DEFAULT_N_CLUSTERS=100
 DEFAULT_N_PROBES=10
+
+# Multimodal / embeddings
+DEFAULT_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+EMBEDDING_DEVICE=cpu
+MEDIA_STORAGE_PATH=media_storage
 
 # Logging
 LOG_LEVEL=INFO

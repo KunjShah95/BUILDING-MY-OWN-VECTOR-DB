@@ -4,6 +4,7 @@ from database.schema import Vector, VectorBatch, VectorBatchMapping
 from models.vector_model import VectorModel
 from database.hnsw_database import HNSWVectorDatabase
 from database.ivf_database import IVFVectorDatabase
+from services.collection_service import CollectionService
 import time
 import logging
 
@@ -21,6 +22,26 @@ class VectorService:
         self.vector_model = VectorModel(db_session)
         self.hnsw_db = HNSWVectorDatabase(db_session)
         self.ivf_db = IVFVectorDatabase(db_session)
+        self.collection_service = CollectionService(db_session)
+
+    def _insert_into_indexes(
+        self,
+        vector_data: List[float],
+        vector_id: str,
+        metadata: Optional[Dict[str, Any]],
+        collection_id: Optional[str],
+    ) -> None:
+        global_hnsw = self.hnsw_db.get_hnsw_index()
+        if global_hnsw is not None:
+            global_hnsw.insert(vector_data, vector_id, metadata)
+
+        if collection_id:
+            scoped = self.hnsw_db.get_hnsw_index(collection_id)
+            if scoped is not None:
+                scoped.insert(vector_data, vector_id, metadata)
+
+        if self.ivf_db.ivf_index is not None and self.ivf_db.ivf_index.is_trained:
+            self.ivf_db.ivf_index.add(vector_data, vector_id, metadata)
 
     # ==================== Vector Operations ====================
 
@@ -29,6 +50,7 @@ class VectorService:
         vector_data: List[float],
         metadata: Optional[Dict[str, Any]] = None,
         vector_id: Optional[str] = None,
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new vector
@@ -42,16 +64,20 @@ class VectorService:
             Creation result
         """
         try:
-            # Insert into database
-            vector = self.vector_model.create_vector(vector_data, metadata, vector_id)
+            if collection_id:
+                dim_check = self.collection_service.validate_vector_dimension(
+                    collection_id, vector_data
+                )
+                if not dim_check.get("success"):
+                    return dim_check
 
-            # Add to HNSW index if it exists
-            if self.hnsw_db.hnsw_index is not None:
-                self.hnsw_db.hnsw_index.insert(vector_data, vector.vector_id, metadata)
+            vector = self.vector_model.create_vector(
+                vector_data, metadata, vector_id, collection_id
+            )
 
-            # Add to IVF index if it exists and is trained
-            if self.ivf_db.ivf_index is not None and self.ivf_db.ivf_index.is_trained:
-                self.ivf_db.ivf_index.add(vector_data, vector.vector_id, metadata)
+            self._insert_into_indexes(
+                vector_data, vector.vector_id, metadata, collection_id
+            )
 
             logger.info(f"Created vector: {vector.vector_id}")
 
@@ -88,22 +114,14 @@ class VectorService:
                 vectors, batch_name, description
             )
 
-            # Add to HNSW index if it exists
-            if self.hnsw_db.hnsw_index is not None:
+            if self.hnsw_db.hnsw_index is not None or self.ivf_db.ivf_index is not None:
                 for vector_data in vectors:
-                    self.hnsw_db.hnsw_index.insert(
+                    cid = vector_data.get("collection_id")
+                    self._insert_into_indexes(
                         vector_data["vector"],
                         vector_data["vector_id"],
                         vector_data.get("metadata"),
-                    )
-
-            # Add to IVF index if it exists and is trained
-            if self.ivf_db.ivf_index is not None and self.ivf_db.ivf_index.is_trained:
-                for vector_data in vectors:
-                    self.ivf_db.ivf_index.add(
-                        vector_data["vector"],
-                        vector_data["vector_id"],
-                        vector_data.get("metadata"),
+                        cid,
                     )
 
             logger.info(f"Created batch with {result['vector_count']} vectors")
@@ -206,15 +224,18 @@ class VectorService:
             Delete result
         """
         try:
-            # Delete from database
+            vector = self.vector_model.get_vector(vector_id)
             success = self.vector_model.delete_vector(vector_id)
 
             if success:
-                # Delete from HNSW index if it exists
                 if self.hnsw_db.hnsw_index is not None:
                     self.hnsw_db.hnsw_index.delete(vector_id)
 
-                # Delete from IVF index if it exists
+                if vector and vector.collection_id:
+                    scoped = self.hnsw_db.get_hnsw_index(vector.collection_id)
+                    if scoped is not None:
+                        scoped.delete(vector_id)
+
                 if self.ivf_db.ivf_index is not None:
                     self.ivf_db.ivf_index.delete_vector(vector_id)
 
@@ -240,6 +261,9 @@ class VectorService:
         ef_search: Optional[int] = None,
         n_probes: Optional[int] = None,
         use_rerank: Optional[bool] = True,
+        collection_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        distance_metric: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Search for similar vectors
@@ -255,13 +279,45 @@ class VectorService:
         """
         try:
             start_time = time.time()
+            metric = distance_metric or "cosine"
+
+            # Collection-scoped search: prefer collection HNSW, else brute force.
+            if collection_id:
+                if method == "hnsw" and self.hnsw_db.get_hnsw_index(collection_id):
+                    result = self.hnsw_db.search_hnsw(
+                        query_vector,
+                        k,
+                        ef_search,
+                        filters=filters,
+                        distance_metric=metric,
+                        collection_id=collection_id,
+                    )
+                else:
+                    results = self.vector_model.search_vectors(
+                        query_vector, k, metric, filters, collection_id
+                    )
+                    search_time = time.time() - start_time
+                    result = {
+                        "success": True,
+                        "query_vector": query_vector,
+                        "results": results,
+                        "total_results": len(results),
+                        "search_time": search_time,
+                        "method": "brute_force",
+                        "collection_id": collection_id,
+                    }
+                return result
 
             if method == "hnsw":
                 # Check if HNSW index exists, fallback to brute force if not
                 if self.hnsw_db.hnsw_index is None:
-                    result = self.hnsw_db.search_brute_force(query_vector, k)
+                    result = self.hnsw_db.search_brute_force(
+                        query_vector, k, filters=filters, distance_metric=metric
+                    )
                 else:
-                    result = self.hnsw_db.search_hnsw(query_vector, k, ef_search)
+                    result = self.hnsw_db.search_hnsw(
+                        query_vector, k, ef_search, filters=filters, distance_metric=metric
+                    )
             elif method == "ivf":
                 effective_n_probes = (
                     n_probes
@@ -278,7 +334,9 @@ class VectorService:
                     n_probes=effective_n_probes,
                 )
             elif method == "brute":
-                result = self.hnsw_db.search_brute_force(query_vector, k)
+                result = self.hnsw_db.search_brute_force(
+                    query_vector, k, filters=filters, distance_metric=metric
+                )
             else:
                 return {"success": False, "message": f"Unknown search method: {method}"}
 
@@ -324,6 +382,7 @@ class VectorService:
         ef_construction: int = 200,
         n_clusters: int = 100,
         n_probes: int = 10,
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create an index
@@ -341,9 +400,13 @@ class VectorService:
         """
         try:
             if method == "hnsw":
-                return self.hnsw_db.create_hnsw_index(m, m0, ef_construction)
+                return self.hnsw_db.create_hnsw_index(
+                    m, m0, ef_construction, collection_id=collection_id
+                )
             elif method == "ivf":
-                return self.ivf_db.create_ivf_index(n_clusters, n_probes)
+                return self.ivf_db.create_ivf_index(
+                    n_clusters, n_probes, collection_id=collection_id
+                )
             else:
                 return {
                     "success": False,
@@ -353,7 +416,9 @@ class VectorService:
             logger.error(f"Error creating index: {str(e)}")
             return {"success": False, "message": f"Error creating index: {str(e)}"}
 
-    def save_index(self, method: str = "hnsw") -> Dict[str, Any]:
+    def save_index(
+        self, method: str = "hnsw", collection_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Save index to disk
 
@@ -365,9 +430,9 @@ class VectorService:
         """
         try:
             if method == "hnsw":
-                return self.hnsw_db.save_hnsw_index()
+                return self.hnsw_db.save_hnsw_index(collection_id=collection_id)
             elif method == "ivf":
-                return self.ivf_db.save_ivf_index()
+                return self.ivf_db.save_ivf_index(collection_id=collection_id)
             else:
                 return {
                     "success": False,
@@ -377,7 +442,9 @@ class VectorService:
             logger.error(f"Error saving index: {str(e)}")
             return {"success": False, "message": f"Error saving index: {str(e)}"}
 
-    def load_index(self, method: str = "hnsw") -> Dict[str, Any]:
+    def load_index(
+        self, method: str = "hnsw", collection_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Load index from disk
 
@@ -389,9 +456,9 @@ class VectorService:
         """
         try:
             if method == "hnsw":
-                return self.hnsw_db.load_hnsw_index()
+                return self.hnsw_db.load_hnsw_index(collection_id=collection_id)
             elif method == "ivf":
-                return self.ivf_db.load_ivf_index()
+                return self.ivf_db.load_ivf_index(collection_id=collection_id)
             else:
                 return {
                     "success": False,

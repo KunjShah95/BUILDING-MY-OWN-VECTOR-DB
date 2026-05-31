@@ -5,6 +5,7 @@ from database.schema import Vector, VectorBatch, VectorBatchMapping
 from models.vector_model import VectorModel
 from utils.hnsw_index import HNSWIndex
 from utils.ivf_index import IVFIndex
+from utils.index_paths import ensure_index_dir, get_hnsw_path
 import numpy as np
 from datetime import datetime
 import json
@@ -18,17 +19,27 @@ class HNSWVectorDatabase:
     Combines PostgreSQL for persistent storage with HNSW for fast search
     """
 
+    _GLOBAL_KEY = "__global__"
+
     def __init__(self, db_session: Session):
         self.db_session = db_session
         self.vector_model = VectorModel(db_session)
 
-        # Indexes
+        # Indexes (global + per-collection)
         self.hnsw_index = None
         self.ivf_index = None
+        self._scoped_hnsw: Dict[str, HNSWIndex] = {}
 
-        # Index paths
-        self.hnsw_index_path = "hnsw_index_data.json"
+        # Index paths (global default)
+        self.hnsw_index_path = get_hnsw_path()
         self.ivf_index_path = "ivf_index_data.json"
+
+    def _scope_key(self, collection_id: Optional[str] = None) -> str:
+        return collection_id if collection_id else self._GLOBAL_KEY
+
+    def get_hnsw_index(self, collection_id: Optional[str] = None) -> Optional[HNSWIndex]:
+        """Return in-memory HNSW index for global or collection scope."""
+        return self._scoped_hnsw.get(self._scope_key(collection_id))
 
     def insert_vector(
         self,
@@ -90,7 +101,11 @@ class HNSWVectorDatabase:
             }
 
     def create_hnsw_index(
-        self, m: int = None, m0: int = None, ef_construction: int = None
+        self,
+        m: int = None,
+        m0: int = None,
+        ef_construction: int = None,
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create an HNSW index with optimized parameters
@@ -99,12 +114,12 @@ class HNSWVectorDatabase:
             m: Number of neighbors per node (default from settings)
             m0: Number of neighbors in layer 0 (default: 2*m)
             ef_construction: Construction parameter (default from settings)
+            collection_id: Optional collection scope for the index
 
         Returns:
             Index creation result
         """
         try:
-            # Use optimized settings if parameters not provided
             from config.settings import get_settings
 
             settings = get_settings()
@@ -116,39 +131,51 @@ class HNSWVectorDatabase:
             if m0 is None:
                 m0 = settings.DEFAULT_M0
 
-            # Get all vectors from database
-            vectors_data = self.vector_model.get_all_vectors()
+            if collection_id:
+                vectors_data = self.vector_model.get_vectors_by_collection(collection_id)
+            else:
+                vectors_data = self.vector_model.get_all_vectors()
 
             if len(vectors_data) == 0:
-                return {"success": False, "message": "No vectors found to create index"}
+                scope = f"collection '{collection_id}'" if collection_id else "database"
+                return {
+                    "success": False,
+                    "message": f"No vectors found in {scope} to create index",
+                }
 
-            # Create HNSW index
-            self.hnsw_index = HNSWIndex(
+            index = HNSWIndex(
                 m=m,
                 m0=m0,
                 ef_construction=ef_construction,
                 distance_metric=settings.DEFAULT_DISTANCE_METRIC,
             )
 
-            # Insert all vectors
             for vector in vectors_data:
-                self.hnsw_index.insert(
+                index.insert(
                     vector.vector_data, vector.vector_id, vector.meta_data
                 )
 
-            # Get index statistics
-            stats = self.hnsw_index.get_graph_stats()
+            key = self._scope_key(collection_id)
+            self._scoped_hnsw[key] = index
+            if not collection_id:
+                self.hnsw_index = index
 
+            self.hnsw_index_path = get_hnsw_path(collection_id)
+            stats = index.get_graph_stats()
+
+            scope_msg = f" for collection '{collection_id}'" if collection_id else ""
             return {
                 "success": True,
-                "message": f"HNSW Index created with m={m}, ef_construction={ef_construction}",
+                "message": f"HNSW Index created{scope_msg} with m={m}, ef_construction={ef_construction}",
                 "stats": stats,
                 "parameters": {"m": m, "m0": m0, "ef_construction": ef_construction},
+                "collection_id": collection_id,
+                "index_path": self.hnsw_index_path,
             }
         except Exception as e:
             return {"success": False, "message": f"Error creating HNSW index: {str(e)}"}
 
-    def save_hnsw_index(self) -> Dict[str, Any]:
+    def save_hnsw_index(self, collection_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Save HNSW index to disk
 
@@ -156,19 +183,24 @@ class HNSWVectorDatabase:
             Save result
         """
         try:
-            if self.hnsw_index is None:
+            index = self.get_hnsw_index(collection_id)
+            if index is None:
                 return {"success": False, "message": "No HNSW index to save"}
 
-            self.hnsw_index.save(self.hnsw_index_path)
+            path = get_hnsw_path(collection_id)
+            ensure_index_dir(collection_id)
+            index.save(path)
 
             return {
                 "success": True,
-                "message": f"HNSW Index saved to {self.hnsw_index_path}",
+                "message": f"HNSW Index saved to {path}",
+                "collection_id": collection_id,
+                "index_path": path,
             }
         except Exception as e:
             return {"success": False, "message": f"Error saving HNSW index: {str(e)}"}
 
-    def load_hnsw_index(self) -> Dict[str, Any]:
+    def load_hnsw_index(self, collection_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Load HNSW index from disk
 
@@ -176,32 +208,68 @@ class HNSWVectorDatabase:
             Load result
         """
         try:
-            if not os.path.exists(self.hnsw_index_path):
+            path = get_hnsw_path(collection_id)
+            if not os.path.exists(path):
                 return {
                     "success": False,
-                    "message": f"HNSW Index file not found: {self.hnsw_index_path}",
+                    "message": f"HNSW Index file not found: {path}",
                 }
 
             from config.settings import get_settings
 
             settings = get_settings()
-            self.hnsw_index = HNSWIndex(
-                distance_metric=settings.DEFAULT_DISTANCE_METRIC
-            )
-            self.hnsw_index.load(self.hnsw_index_path)
+            index = HNSWIndex(distance_metric=settings.DEFAULT_DISTANCE_METRIC)
+            index.load(path)
 
-            stats = self.hnsw_index.get_graph_stats()
+            key = self._scope_key(collection_id)
+            self._scoped_hnsw[key] = index
+            if not collection_id:
+                self.hnsw_index = index
+            self.hnsw_index_path = path
+
+            stats = index.get_graph_stats()
 
             return {
                 "success": True,
                 "message": "HNSW Index loaded successfully",
                 "stats": stats,
+                "collection_id": collection_id,
+                "index_path": path,
             }
         except Exception as e:
             return {"success": False, "message": f"Error loading HNSW index: {str(e)}"}
 
+    def _filter_search_results(
+        self,
+        results: List[Dict[str, Any]],
+        k: int,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        if not filters:
+            return results[:k]
+
+        filtered = []
+        for item in results:
+            vector_id = item.get("vector_id")
+            if not vector_id:
+                continue
+            vector = self.vector_model.get_vector(vector_id)
+            if vector and self.vector_model._metadata_matches(vector.meta_data, filters):
+                if "metadata" not in item:
+                    item["metadata"] = vector.meta_data
+                filtered.append(item)
+            if len(filtered) >= k:
+                break
+        return filtered
+
     def search_hnsw(
-        self, query_vector: List[float], k: int = 5, ef_search: int = None
+        self,
+        query_vector: List[float],
+        k: int = 5,
+        ef_search: int = None,
+        filters: Optional[Dict[str, Any]] = None,
+        distance_metric: str = "cosine",
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Search using HNSW index with optimized parameters
@@ -215,17 +283,23 @@ class HNSWVectorDatabase:
             Search results with timing information
         """
         try:
-            if self.hnsw_index is None:
-                return {"success": False, "message": "No HNSW index created yet"}
+            index = self.get_hnsw_index(collection_id)
+            if index is None:
+                scope = f"collection '{collection_id}'" if collection_id else "global"
+                return {
+                    "success": False,
+                    "message": f"No HNSW index for {scope}. Create or load one first.",
+                }
 
-            # Use optimized ef_search if not specified
             from config.settings import get_settings
 
             if ef_search is None:
                 ef_search = get_settings().DEFAULT_EF_SEARCH
 
             start_time = time.time()
-            results = self.hnsw_index.search(query_vector, k, ef=ef_search)
+            fetch_k = k * 20 if filters else k
+            raw_results = index.search(query_vector, fetch_k, ef=ef_search)
+            results = self._filter_search_results(raw_results, k, filters)
             search_time = time.time() - start_time
 
             return {
@@ -236,6 +310,7 @@ class HNSWVectorDatabase:
                 "search_time": search_time,
                 "ef_search": ef_search,
                 "method": "hnsw",
+                "collection_id": collection_id,
             }
         except Exception as e:
             return {"success": False, "message": f"Error during HNSW search: {str(e)}"}
@@ -270,7 +345,11 @@ class HNSWVectorDatabase:
             return {"success": False, "message": f"Unknown search method: {method}"}
 
     def search_brute_force(
-        self, query_vector: List[float], k: int = 5
+        self,
+        query_vector: List[float],
+        k: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
+        distance_metric: str = "cosine",
     ) -> Dict[str, Any]:
         """
         Search using brute force (fallback)
@@ -284,7 +363,9 @@ class HNSWVectorDatabase:
         """
         try:
             start_time = time.time()
-            results = self.vector_model.search_vectors(query_vector, k, "cosine")
+            results = self.vector_model.search_vectors(
+                query_vector, k, distance_metric, filters
+            )
             search_time = time.time() - start_time
 
             return {
