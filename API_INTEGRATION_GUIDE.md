@@ -632,4 +632,52 @@ Visit: <http://localhost:8000/docs>
 
 ---
 
+## Python SDK (Collections & Multimodal)
+
+Install from the repo:
+
+```bash
+pip install -e sdk
+```
+
+```python
+from vector_db_client import VectorDBClient
+
+with VectorDBClient("http://localhost:8000") as client:
+    client.collections.create(
+        name="Docs",
+        collection_id="product-docs",
+        modality="text",
+        dimension=384,
+    )
+    client.multimodal.ingest_text(
+        "product-docs",
+        "Returns are accepted within 30 days.",
+        vector_id="policy-returns",
+    )
+    hits = client.multimodal.search_text("product-docs", "how do I return an item?")
+    print(hits.results[0].vector_id, hits.results[0].distance)
+```
+
+Multipart media ingest/search:
+
+```python
+client.multimodal.ingest_image("product-photos", path="shirt.jpg")
+client.multimodal.search_image("product-photos", path="query.jpg", k=5)
+client.multimodal.ingest_audio("voice-clips", path="clip.wav")
+```
+
+REST paths mirrored by the SDK:
+
+| Operation | HTTP |
+|-----------|------|
+| Ingest text | `POST /collections/{id}/ingest/text` |
+| Ingest image | `POST /collections/{id}/ingest/image` |
+| Ingest audio | `POST /collections/{id}/ingest/audio` |
+| Search text | `POST /collections/{id}/search/text` |
+| Search image | `POST /collections/{id}/search/image` |
+| Search audio | `POST /collections/{id}/search/audio` |
+
+---
+
 Your VectorIndexer REST API is now fully integrated and ready to use! 🚀
