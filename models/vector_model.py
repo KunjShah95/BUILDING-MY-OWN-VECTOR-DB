@@ -36,7 +36,7 @@ class VectorModel:
             }
 
     def create_vector(self, vector_data: List[float], metadata: Dict[str, Any] = None, 
-                     vector_id: str = None) -> Vector:
+                     vector_id: str = None, collection_id: str = None) -> Vector:
         """
         Create a new vector in the database
         """
@@ -64,7 +64,8 @@ class VectorModel:
             vector = Vector(
                 vector_data=vector_data,
                 meta_data=metadata,
-                vector_id=vector_id
+                vector_id=vector_id,
+                collection_id=collection_id,
             )
             
             self.db.add(vector)
@@ -143,6 +144,14 @@ class VectorModel:
         Get all vectors with pagination
         """
         return self.db.query(Vector).offset(offset).limit(limit).all()
+
+    def get_vectors_by_collection(self, collection_id: str) -> List[Vector]:
+        """Get all vectors belonging to a collection."""
+        return (
+            self.db.query(Vector)
+            .filter(Vector.collection_id == collection_id)
+            .all()
+        )
     
     def get_vectors_by_batch(self, batch_id: int) -> List[Vector]:
         """
@@ -221,19 +230,28 @@ class VectorModel:
     
     def search_vectors(self, query_vector: List[float], k: int = 5, 
                       distance_metric: str = 'cosine', 
-                      filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+                      filters: Dict[str, Any] = None,
+                      collection_id: str = None) -> List[Dict[str, Any]]:
         """
         Search for similar vectors using brute force with optional filters
         """
-        vectors = self.get_all_vectors()
+        if collection_id:
+            vectors = self.get_vectors_by_collection(collection_id)
+        else:
+            vectors = self.get_all_vectors()
+
         results = []
         
         for vector in vectors:
+            if filters and not self._metadata_matches(vector.meta_data, filters):
+                continue
             distance = self._calculate_distance(query_vector, vector.vector_data, distance_metric)
             results.append({
                 "distance": distance,
                 "vector_id": vector.vector_id,
+                "metadata": vector.meta_data,
                 "meta_data": vector.meta_data,
+                "collection_id": vector.collection_id,
                 "vector": vector.vector_data,
                 "created_at": vector.created_at
             })
@@ -241,6 +259,14 @@ class VectorModel:
         # Sort by distance and return top k
         results.sort(key=lambda x: x["distance"])
         return results[:k]
+
+    def _metadata_matches(self, meta_data: Optional[Dict[str, Any]], filters: Dict[str, Any]) -> bool:
+        if not meta_data:
+            return False
+        for key, value in filters.items():
+            if meta_data.get(key) != value:
+                return False
+        return True
     
     def _calculate_distance(self, vector1: List[float], vector2: List[float], 
                           metric: str = 'cosine') -> float:
@@ -285,13 +311,11 @@ class VectorModel:
     
     def search_vectors_with_filters(self, query_vector: List[float], k: int = 5,
                                    filters: Dict[str, Any] = None,
-                                   distance_metric: str = 'cosine') -> List[Dict[str, Any]]:
+                                   distance_metric: str = 'cosine',
+                                   collection_id: str = None) -> List[Dict[str, Any]]:
         """
-        Search with metadata filters
+        Search with metadata filters and optional collection scope
         """
-        # This is a simplified version - in a real implementation, you'd need
-        # more sophisticated filtering
-        if filters:
-            print(f"Filters provided (simplified): {filters}")
-        
-        return self.search_vectors(query_vector, k, distance_metric)
+        return self.search_vectors(
+            query_vector, k, distance_metric, filters, collection_id
+        )

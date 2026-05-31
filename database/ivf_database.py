@@ -5,6 +5,7 @@ from database.schema import Vector, VectorBatch, VectorBatchMapping
 from models.vector_model import VectorModel
 from utils.ivf_index import IVFIndex
 from utils.clustering import KMeans
+from utils.index_paths import ensure_index_dir, get_ivf_path
 import numpy as np
 from datetime import datetime
 import json
@@ -15,7 +16,8 @@ class IVFVectorDatabase:
         self.db_session = db_session
         self.vector_model = VectorModel(db_session)
         self.ivf_index = None
-        self.index_path = "index_data.json"
+        self.index_path = get_ivf_path()
+        self._collection_id: Optional[str] = None
 
     def clear_database(self) -> Dict[str, Any]:
         """
@@ -74,7 +76,11 @@ class IVFVectorDatabase:
             }
 
     def create_ivf_index(
-        self, n_clusters: int = 100, n_probes: int = 10, force_rebuild: bool = False
+        self,
+        n_clusters: int = 100,
+        n_probes: int = 10,
+        force_rebuild: bool = False,
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create an IVF index
@@ -95,11 +101,17 @@ class IVFVectorDatabase:
                     "message": "IVF Index already exists. Use force_rebuild=True to rebuild.",
                 }
 
-            # Get all vectors from database
-            vectors_data = self.vector_model.get_all_vectors()
+            if collection_id:
+                vectors_data = self.vector_model.get_vectors_by_collection(collection_id)
+            else:
+                vectors_data = self.vector_model.get_all_vectors()
 
             if len(vectors_data) == 0:
-                return {"success": False, "message": "No vectors found to create index"}
+                scope = f"collection '{collection_id}'" if collection_id else "database"
+                return {
+                    "success": False,
+                    "message": f"No vectors found in {scope} to create index",
+                }
 
             # Prepare data for indexing
             vectors = [vector.vector_data for vector in vectors_data]
@@ -117,21 +129,25 @@ class IVFVectorDatabase:
                 metadata = original_vector.meta_data if original_vector else None
                 self.ivf_index.add(vector, vector_id, metadata)
 
-            # Save index to disk
+            self._collection_id = collection_id
+            self.index_path = get_ivf_path(collection_id)
+            ensure_index_dir(collection_id)
             self.ivf_index.save(self.index_path)
 
-            # Get index statistics
             stats = self.ivf_index.get_stats()
 
+            scope_msg = f" for collection '{collection_id}'" if collection_id else ""
             return {
                 "success": True,
-                "message": f"IVF Index created with {n_clusters} clusters",
+                "message": f"IVF Index created{scope_msg} with {n_clusters} clusters",
                 "stats": stats,
+                "collection_id": collection_id,
+                "index_path": self.index_path,
             }
         except Exception as e:
             return {"success": False, "message": f"Error creating IVF index: {str(e)}"}
 
-    def load_ivf_index(self) -> Dict[str, Any]:
+    def load_ivf_index(self, collection_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Load IVF index from disk
 
@@ -139,14 +155,17 @@ class IVFVectorDatabase:
             Load result
         """
         try:
-            if not os.path.exists(self.index_path):
+            path = get_ivf_path(collection_id)
+            if not os.path.exists(path):
                 return {
                     "success": False,
-                    "message": f"Index file not found: {self.index_path}",
+                    "message": f"Index file not found: {path}",
                 }
 
             self.ivf_index = IVFIndex()
-            self.ivf_index.load(self.index_path)
+            self.ivf_index.load(path)
+            self._collection_id = collection_id
+            self.index_path = path
 
             stats = self.ivf_index.get_stats()
 
@@ -154,11 +173,13 @@ class IVFVectorDatabase:
                 "success": True,
                 "message": "IVF Index loaded successfully",
                 "stats": stats,
+                "collection_id": collection_id,
+                "index_path": path,
             }
         except Exception as e:
             return {"success": False, "message": f"Error loading IVF index: {str(e)}"}
 
-    def save_ivf_index(self) -> Dict[str, Any]:
+    def save_ivf_index(self, collection_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Save IVF index to disk
 
@@ -169,9 +190,16 @@ class IVFVectorDatabase:
             if self.ivf_index is None:
                 return {"success": False, "message": "No IVF index to save"}
 
-            self.ivf_index.save(self.index_path)
+            path = get_ivf_path(collection_id)
+            ensure_index_dir(collection_id)
+            self.ivf_index.save(path)
 
-            return {"success": True, "message": f"IVF Index saved to {self.index_path}"}
+            return {
+                "success": True,
+                "message": f"IVF Index saved to {path}",
+                "collection_id": collection_id,
+                "index_path": path,
+            }
         except Exception as e:
             return {"success": False, "message": f"Error saving IVF index: {str(e)}"}
 
