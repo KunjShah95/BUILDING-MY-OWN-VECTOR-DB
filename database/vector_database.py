@@ -78,7 +78,7 @@ class VectorDatabase:
                 }
 
             # Get all vectors from database
-            vectors_data = self.vector_model.get_all_vectors()
+            vectors_data = self.vector_model.get_all_vectors(limit=None)
 
             if len(vectors_data) == 0:
                 return {"success": False, "message": "No vectors found to create index"}

@@ -36,36 +36,44 @@ class OptimizedDistanceCalculator:
     """
     
     @staticmethod
+    @_jit_decorator(nopython=NUMBA_AVAILABLE, parallel=NUMBA_AVAILABLE)
     def cosine_distance_batch(vectors: np.ndarray, query: np.ndarray) -> np.ndarray:
         """
         Calculate cosine distance for all vectors (parallelized)
-        
+
         Args:
             vectors: Array of shape (n, d)
             query: Query vector of shape (d,)
-            
+
         Returns:
             Array of distances of shape (n,)
         """
         n = vectors.shape[0]
         distances = np.empty(n, dtype=np.float64)
-        
-        # Calculate query norm
+
         query_norm = np.sqrt(np.sum(query ** 2))
         if query_norm == 0:
             query_norm = 1.0
-        
-        for i in prange(n):
-            vector = vectors[i]
-            dot_product = np.dot(vector, query)
-            vector_norm = np.sqrt(np.sum(vector ** 2))
-            if vector_norm == 0:
-                vector_norm = 1.0
-            
-            # Cosine distance = 1 - cosine similarity
-            cosine_sim = dot_product / (vector_norm * query_norm)
-            distances[i] = 1.0 - cosine_sim
-        
+
+        if NUMBA_AVAILABLE:
+            for i in prange(n):
+                vector = vectors[i]
+                dot_product = np.dot(vector, query)
+                vector_norm = np.sqrt(np.sum(vector ** 2))
+                if vector_norm == 0:
+                    vector_norm = 1.0
+                cosine_sim = dot_product / (vector_norm * query_norm)
+                distances[i] = 1.0 - cosine_sim
+        else:
+            for i in range(n):
+                vector = vectors[i]
+                dot_product = np.dot(vector, query)
+                vector_norm = np.sqrt(np.sum(vector ** 2))
+                if vector_norm == 0:
+                    vector_norm = 1.0
+                cosine_sim = dot_product / (vector_norm * query_norm)
+                distances[i] = 1.0 - cosine_sim
+
         return distances
     
     @staticmethod

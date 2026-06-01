@@ -1,0 +1,32 @@
+prefix = "vectordb"
+
+location = "us-east-1"
+
+tags = {
+  Environment = "production"
+  Project     = "vector-db"
+  ManagedBy   = "terraform"
+}
+
+vpc_cidr    = ["10.0.0.0/16"]
+subnet_cidr = ["10.0.1.0/24"]
+
+db_user     = "vector_user"
+db_password = "your-strong-password-here-change-me"
+db_name     = "vector_db"
+
+pg_version              = "15"
+db_storage_size_gb      = 100
+backup_retention_days   = 30
+aws_rds_instance_class  = "db.t3.medium"
+
+docker_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/vector-db-api"
+image_tag    = "latest"
+
+api_key = "your-api-key-here-change-me"
+
+aws_cpu    = "512"
+aws_memory = "1024"
+
+min_capacity = 1
+max_capacity = 5

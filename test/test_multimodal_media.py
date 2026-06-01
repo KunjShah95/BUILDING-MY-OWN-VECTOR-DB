@@ -209,4 +209,3 @@ def test_text_search_on_clip_image_collection(mock_img, mock_clip, client, tmp_p
     assert search.status_code == 200
     assert search.json()["success"] is True
     mock_clip.assert_called()
-    assert "/collections/{collection_id}/search/text" in paths

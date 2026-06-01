@@ -12,6 +12,14 @@ settings = get_settings()
 class VectorModel:
     def __init__(self, db: Session):
         self.db = db
+
+    def _tenant_collection_ids(self, tenant_id: str) -> List[str]:
+        """Get all collection IDs belonging to a tenant."""
+        from database.schema import Collection
+        rows = self.db.query(Collection.collection_id).filter(
+            Collection.tenant_id == tenant_id
+        ).all()
+        return [r[0] for r in rows]
     
     def clear_all_vectors(self) -> Dict[str, Any]:
         """
@@ -142,6 +150,7 @@ class VectorModel:
         """
         return self.db.query(Vector).filter(Vector.id == vector_id).first()
     
+<<<<<<< HEAD
     def get_all_vectors(self, collection_id: str = None, offset: int = 0, limit: int = 10000, filters: dict = None) -> List[Vector]:
         """
         Get all vectors with pagination and optional collection filter
@@ -151,6 +160,28 @@ class VectorModel:
             query = query.filter(Vector.collection_id == collection_id)
         query = query.offset(offset).limit(limit)
 
+=======
+    def get_all_vectors(self, collection_id: str = None, offset: int = 0,
+                        limit: int = 10000, filters: dict = None,
+                        collection_ids: Optional[List[str]] = None) -> List[Vector]:
+        """
+        Get all vectors with pagination and optional collection/tenant filter.
+
+        Args:
+            collection_id: Filter by a single collection.
+            offset: Pagination offset.
+            limit: Max results.
+            filters: Metadata filter dict.
+            collection_ids: Filter by multiple collection IDs (for tenant scoping).
+        """
+        query = self.db.query(Vector)
+        if collection_id:
+            query = query.filter(Vector.collection_id == collection_id)
+        elif collection_ids is not None:
+            query = query.filter(Vector.collection_id.in_(collection_ids))
+        query = query.offset(offset).limit(limit)
+
+>>>>>>> main
         results = query.all()
 
         if filters:
@@ -246,17 +277,40 @@ class VectorModel:
     def search_vectors(self, query_vector: List[float], k: int = 5, 
                       distance_metric: str = 'cosine', 
                       filters: Dict[str, Any] = None,
-                      collection_id: str = None) -> List[Dict[str, Any]]:
+                      collection_id: str = None,
+                      tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
+<<<<<<< HEAD
         Search for similar vectors using brute force with optional filters
         Loads vectors in batches of 1000 to avoid OOM on large datasets
+=======
+        Search for similar vectors using brute force with optional filters.
+        Accepts tenant_id to scope search to tenant-owned collections.
+        Loads vectors in batches of 1000 to avoid OOM on large datasets.
+>>>>>>> main
         """
         batch_size = 1000
         offset = 0
         all_results = []
 
+<<<<<<< HEAD
         while True:
             batch = self.get_all_vectors(collection_id, offset=offset, limit=batch_size, filters=filters)
+=======
+        # Determine collection IDs to filter by
+        ids_to_filter = None
+        if collection_id:
+            ids_to_filter = [collection_id]
+        elif tenant_id:
+            ids_to_filter = self._tenant_collection_ids(tenant_id)
+
+        while True:
+            batch = self.get_all_vectors(
+                collection_id=None if ids_to_filter is None or len(ids_to_filter) != 1 else ids_to_filter[0],
+                offset=offset, limit=batch_size, filters=filters,
+                collection_ids=ids_to_filter,
+            )
+>>>>>>> main
             if not batch:
                 break
 

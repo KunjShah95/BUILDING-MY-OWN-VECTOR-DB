@@ -1,7 +1,12 @@
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+<<<<<<< HEAD
 from database.schema import Vector, VectorBatch, VectorBatchMapping
 from models.vector_model import VectorModel, VectorPgVectorModel
+=======
+from database.schema import Vector, VectorBatch, VectorBatchMapping, Collection
+from models.vector_model import VectorModel
+>>>>>>> main
 from database.hnsw_database import HNSWVectorDatabase
 from database.ivf_database import IVFVectorDatabase
 from services.collection_service import CollectionService
@@ -46,6 +51,15 @@ class VectorService:
         self.bm25_index: Optional[BM25Index] = None
         self.pq_index: Optional[PQIndex] = None
 
+    def _collection_ids_for_tenant(self, tenant_id: str) -> List[str]:
+        """Get all collection IDs belonging to a tenant."""
+        records = (
+            self.db.query(Collection)
+            .filter(Collection.tenant_id == tenant_id)
+            .all()
+        )
+        return [r.collection_id for r in records]
+
     def _insert_into_indexes(
         self,
         vector_data: List[float],
@@ -81,6 +95,7 @@ class VectorService:
         metadata: Optional[Dict[str, Any]] = None,
         vector_id: Optional[str] = None,
         collection_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new vector
@@ -89,6 +104,8 @@ class VectorService:
             vector_data: Vector data
             metadata: Optional metadata
             vector_id: Optional custom ID
+            collection_id: Optional collection scope
+            tenant_id: Optional tenant scope (validates collection ownership)
 
         Returns:
             Creation result
@@ -96,7 +113,7 @@ class VectorService:
         try:
             if collection_id:
                 dim_check = self.collection_service.validate_vector_dimension(
-                    collection_id, vector_data
+                    collection_id, vector_data, tenant_id=tenant_id,
                 )
                 if not dim_check.get("success"):
                     return dim_check
@@ -201,12 +218,14 @@ class VectorService:
             logger.error(f"Error creating batch: {str(e)}")
             return {"success": False, "message": f"Error creating batch: {str(e)}"}
 
-    def get_vector(self, vector_id: str) -> Dict[str, Any]:
+    def get_vector(self, vector_id: str,
+                   tenant_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Get a vector by ID
 
         Args:
             vector_id: Vector ID
+            tenant_id: Optional tenant scope (validates collection ownership)
 
         Returns:
             Vector data or error
@@ -215,6 +234,10 @@ class VectorService:
             vector = self.vector_model.get_vector(vector_id)
 
             if vector:
+                if tenant_id and vector.collection_id:
+                    t_ids = self._collection_ids_for_tenant(tenant_id)
+                    if vector.collection_id not in t_ids:
+                        return {"success": False, "message": "Vector not found"}
                 return {"success": True, "vector": vector.to_dict()}
             else:
                 return {"success": False, "message": "Vector not found"}
@@ -222,19 +245,27 @@ class VectorService:
             logger.error(f"Error getting vector {vector_id}: {str(e)}")
             return {"success": False, "message": f"Error getting vector: {str(e)}"}
 
-    def get_all_vectors(self, limit: int = 1000, offset: int = 0) -> Dict[str, Any]:
+    def get_all_vectors(self, limit: int = 1000, offset: int = 0,
+                        tenant_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Get all vectors with pagination
 
         Args:
             limit: Maximum number of vectors
             offset: Offset for pagination
+            tenant_id: Optional tenant scope
 
         Returns:
             List of vectors
         """
         try:
-            vectors = self.vector_model.get_all_vectors(limit, offset)
+            if tenant_id:
+                vectors = self.vector_model.get_all_vectors(
+                    limit, offset,
+                    collection_ids=self._collection_ids_for_tenant(tenant_id),
+                )
+            else:
+                vectors = self.vector_model.get_all_vectors(limit, offset)
 
             return {
                 "success": True,
@@ -277,18 +308,28 @@ class VectorService:
             logger.error(f"Error updating vector {vector_id}: {str(e)}")
             return {"success": False, "message": f"Error updating vector: {str(e)}"}
 
-    def delete_vector(self, vector_id: str) -> Dict[str, Any]:
+    def delete_vector(self, vector_id: str,
+                      tenant_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Delete a vector
 
         Args:
             vector_id: Vector ID
+            tenant_id: Optional tenant scope (validates collection ownership)
 
         Returns:
             Delete result
         """
         try:
             vector = self.vector_model.get_vector(vector_id)
+            if not vector:
+                return {"success": False, "message": "Vector not found"}
+
+            if tenant_id and vector.collection_id:
+                t_ids = self._collection_ids_for_tenant(tenant_id)
+                if vector.collection_id not in t_ids:
+                    return {"success": False, "message": "Vector not found"}
+
             success = self.vector_model.delete_vector(vector_id)
 
             if success:
@@ -333,9 +374,13 @@ class VectorService:
         collection_id: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         distance_metric: Optional[str] = None,
+<<<<<<< HEAD
         cross_encoder_rerank: bool = False,
         rerank_top_k: Optional[int] = None,
         query_text: Optional[str] = None,
+=======
+        tenant_id: Optional[str] = None,
+>>>>>>> main
     ) -> Dict[str, Any]:
         """
         Search for similar vectors
@@ -345,9 +390,13 @@ class VectorService:
             k: Number of results
             method: Search method
             ef_search: HNSW search parameter
+<<<<<<< HEAD
             cross_encoder_rerank: Enable cross-encoder re-ranking
             rerank_top_k: Candidates to send to cross-encoder
             query_text: Original text query (required for cross-encoder)
+=======
+            tenant_id: Optional tenant scope (validates collection ownership)
+>>>>>>> main
 
         Returns:
             Search results
@@ -356,6 +405,7 @@ class VectorService:
             start_time = time.time()
             metric = distance_metric or "cosine"
 
+<<<<<<< HEAD
             # Determine effective k for initial ANN search
             # If cross-encoder reranking is enabled, fetch more candidates
             # so re-ranking has a larger pool to pick from
@@ -380,6 +430,38 @@ class VectorService:
                 }
 
             # Collection-scoped search
+=======
+            # Tenant scope validation
+            if tenant_id:
+                if collection_id:
+                    coll_check = self.collection_service.get_collection(
+                        collection_id, tenant_id=tenant_id,
+                    )
+                    if not coll_check.get("success"):
+                        return coll_check
+                else:
+                    # No collection specified — search across tenant's collections
+                    t_ids = self._collection_ids_for_tenant(tenant_id)
+                    if not t_ids:
+                        return {
+                            "success": True, "results": [],
+                            "total_results": 0, "method": "brute_force",
+                        }
+                    results = self.vector_model.search_vectors(
+                        query_vector, k, metric, filters, tenant_id=tenant_id,
+                    )
+                    search_time = time.time() - start_time
+                    return {
+                        "success": True,
+                        "query_vector": query_vector,
+                        "results": results,
+                        "total_results": len(results),
+                        "search_time": search_time,
+                        "method": "brute_force_tenant",
+                    }
+
+            # Collection-scoped search: prefer collection HNSW, else brute force.
+>>>>>>> main
             if collection_id:
                 if method == "hnsw" and self.hnsw_db.get_hnsw_index(collection_id):
                     result = self.hnsw_db.search_hnsw(

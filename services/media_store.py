@@ -43,10 +43,20 @@ def resolve_media_path(content_uri: str) -> Path:
     """Resolve a stored content_uri to an absolute filesystem path."""
     settings = get_settings()
     root = Path(settings.MEDIA_STORAGE_PATH).resolve()
+    if not content_uri:
+        raise ValueError("content_uri is required")
+
     uri_path = Path(content_uri.replace("\\", "/"))
-    if uri_path.parts and uri_path.parts[0] == root.name:
-        return root.parent / uri_path
-    return root.parent / uri_path
+    if uri_path.is_absolute():
+        resolved_path = uri_path.resolve()
+    else:
+        if uri_path.parts and uri_path.parts[0] == root.name:
+            uri_path = Path(*uri_path.parts[1:])
+        resolved_path = (root / uri_path).resolve()
+
+    if not resolved_path.is_relative_to(root):
+        raise ValueError("Access denied: Path traversal detected")
+    return resolved_path
 
 
 def read_media_bytes(source: Union[str, Path, bytes]) -> bytes:

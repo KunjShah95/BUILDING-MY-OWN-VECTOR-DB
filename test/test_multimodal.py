@@ -150,3 +150,16 @@ def test_list_and_delete_collection(mock_embed, client, collection_id):
 
     missing = client.get(f"/collections/{collection_id}")
     assert missing.status_code == 404
+
+
+@patch("services.multimodal_service.embed_text", side_effect=_mock_embed_text)
+def test_delete_collection_removes_index_directory(mock_embed, client, collection_id, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    index_dir = tmp_path / "indexes" / collection_id
+    index_dir.mkdir(parents=True)
+    (index_dir / "hnsw_index_data.json").write_text("{}")
+
+    deleted = client.delete(f"/collections/{collection_id}")
+    assert deleted.status_code == 200
+    assert not index_dir.exists()

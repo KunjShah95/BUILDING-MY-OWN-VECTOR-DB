@@ -46,9 +46,10 @@ class CollectionIndexService:
         ef_construction: int = 200,
         n_clusters: int = 100,
         n_probes: int = 10,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         slug = self._normalize(collection_id)
-        coll = self.collection_service.get_collection(slug)
+        coll = self.collection_service.get_collection(slug, tenant_id=tenant_id)
         if not coll.get("success"):
             return coll
 
@@ -108,9 +109,10 @@ class CollectionIndexService:
         use_rerank: Optional[bool] = True,
         filters: Optional[Dict[str, Any]] = None,
         distance_metric: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         slug = self._normalize(collection_id)
-        coll = self.collection_service.get_collection(slug)
+        coll = self.collection_service.get_collection(slug, tenant_id=tenant_id)
         if not coll.get("success"):
             return coll
 
@@ -158,9 +160,9 @@ class CollectionIndexService:
             distance_metric=metric,
         )
 
-    def get_collection_index_stats(self, collection_id: str) -> Dict[str, Any]:
+    def get_collection_index_stats(self, collection_id: str, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         slug = self._normalize(collection_id)
-        coll = self.collection_service.get_collection(slug)
+        coll = self.collection_service.get_collection(slug, tenant_id=tenant_id)
         if not coll.get("success"):
             return coll
 

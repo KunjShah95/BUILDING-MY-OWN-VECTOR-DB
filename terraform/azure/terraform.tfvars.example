@@ -1,0 +1,31 @@
+prefix = "vectordb"
+
+location = "eastus"
+
+tags = {
+  Environment = "production"
+  Project     = "vector-db"
+  ManagedBy   = "terraform"
+}
+
+vnet_cidr   = ["10.0.0.0/16"]
+subnet_cidr = ["10.0.1.0/24"]
+
+db_user     = "vector_user"
+db_password = "your-strong-password-here-change-me"
+db_name     = "vector_db"
+
+pg_version          = "15"
+db_storage_size_gb  = 100
+backup_retention_days = 30
+geo_redundant_backup  = false
+azure_pg_sku         = "GP_Standard_D2ds_v4"
+azure_asp_sku        = "P1v2"
+
+docker_image = "ghcr.io/your-org/vector-db-api"
+image_tag    = "latest"
+
+api_key = "your-api-key-here-change-me"
+
+min_capacity = 1
+max_capacity = 5

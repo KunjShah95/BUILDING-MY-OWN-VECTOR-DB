@@ -117,7 +117,7 @@ class IVFVectorDatabase:
             if collection_id:
                 vectors_data = self.vector_model.get_vectors_by_collection(collection_id)
             else:
-                vectors_data = self.vector_model.get_all_vectors()
+                vectors_data = self.vector_model.get_all_vectors(limit=None)
 
             if len(vectors_data) == 0:
                 scope = f"collection '{collection_id}'" if collection_id else "database"

@@ -77,9 +77,10 @@ class MultimodalService:
         text: str,
         metadata: Optional[Dict[str, Any]] = None,
         vector_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         try:
-            coll = self.collection_service.get_collection(collection_id)
+            coll = self.collection_service.get_collection(collection_id, tenant_id=tenant_id)
             if not coll.get("success"):
                 return coll
 
@@ -124,9 +125,10 @@ class MultimodalService:
         filename: str = "upload.jpg",
         metadata: Optional[Dict[str, Any]] = None,
         vector_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         try:
-            coll = self.collection_service.get_collection(collection_id)
+            coll = self.collection_service.get_collection(collection_id, tenant_id=tenant_id)
             if not coll.get("success"):
                 return coll
 
@@ -177,9 +179,10 @@ class MultimodalService:
         filename: str = "upload.wav",
         metadata: Optional[Dict[str, Any]] = None,
         vector_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         try:
-            coll = self.collection_service.get_collection(collection_id)
+            coll = self.collection_service.get_collection(collection_id, tenant_id=tenant_id)
             if not coll.get("success"):
                 return coll
 
@@ -231,9 +234,10 @@ class MultimodalService:
         n_probes: Optional[int] = None,
         use_rerank: Optional[bool] = True,
         filters: Optional[Dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         try:
-            coll = self.collection_service.get_collection(collection_id)
+            coll = self.collection_service.get_collection(collection_id, tenant_id=tenant_id)
             if not coll.get("success"):
                 return coll
 
@@ -254,6 +258,7 @@ class MultimodalService:
                 use_rerank=use_rerank,
                 filters=filters,
                 distance_metric=collection["distance_metric"],
+                tenant_id=tenant_id,
             )
 
             if result.get("success"):
@@ -276,9 +281,10 @@ class MultimodalService:
         n_probes: Optional[int] = None,
         use_rerank: Optional[bool] = True,
         filters: Optional[Dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         try:
-            coll = self.collection_service.get_collection(collection_id)
+            coll = self.collection_service.get_collection(collection_id, tenant_id=tenant_id)
             if not coll.get("success"):
                 return coll
 
@@ -300,6 +306,7 @@ class MultimodalService:
                 use_rerank=use_rerank,
                 filters=filters,
                 distance_metric=collection["distance_metric"],
+                tenant_id=tenant_id,
             )
 
             if result.get("success"):
@@ -322,9 +329,10 @@ class MultimodalService:
         n_probes: Optional[int] = None,
         use_rerank: Optional[bool] = True,
         filters: Optional[Dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         try:
-            coll = self.collection_service.get_collection(collection_id)
+            coll = self.collection_service.get_collection(collection_id, tenant_id=tenant_id)
             if not coll.get("success"):
                 return coll
 
@@ -346,6 +354,7 @@ class MultimodalService:
                 use_rerank=use_rerank,
                 filters=filters,
                 distance_metric=collection["distance_metric"],
+                tenant_id=tenant_id,
             )
 
             if result.get("success"):

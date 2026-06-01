@@ -253,12 +253,12 @@ class HNSWIndex:
             # Add to current node
             if neighbor_id not in node.neighbors[level]:
                 node.neighbors[level].append(neighbor_id)
-                self.total_inserted += 1
-            
+                self.total_connections_made += 1
+
             # Add bidirectional connection
             if node_id not in neighbor.neighbors[level]:
                 neighbor.neighbors[level].append(node_id)
-                self.total_inserted += 1
+                self.total_connections_made += 1
         
         return search_results[0][0] if search_results else ep_node_id
     
