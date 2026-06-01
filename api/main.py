@@ -1,11 +1,27 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, status, File, UploadFile, Form
+import uuid
+
+from fastapi import FastAPI, Depends, HTTPException, Query, status, File, UploadFile, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Dict, Any, Optional
 import json
 import logging
 import time
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+
+def _rate_limit_key(request) -> str:
+    """Use tenant identity for rate limiting when available, fall back to IP."""
+    tenant_id = getattr(request.state, "tenant_id", None)
+    if tenant_id:
+        return f"tenant:{tenant_id}"
+    return get_remote_address(request)
 
 # Import configurations
 from config.database import Base, engine, get_db
@@ -34,6 +50,13 @@ try:
 except ImportError:
     INDEXER_AVAILABLE = False
 
+# Prometheus metrics
+from prometheus_client import make_asgi_app, Counter, Histogram
+
+VECTOR_SEARCH_REQUESTS = Counter("vector_search_requests_total", "Total vector search requests")
+VECTOR_INGEST_REQUESTS = Counter("vector_ingest_requests_total", "Total vector ingest requests")
+QUERY_LATENCY = Histogram("vector_query_latency_seconds", "Query latency in seconds")
+
 # Initialize FastAPI app
 settings = get_settings()
 app = FastAPI(
@@ -57,9 +80,10 @@ app = FastAPI(
 )
 
 # Configure CORS
+cors_origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS != "*" else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_HOSTS,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,6 +95,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Auth middleware
+from api.middleware.auth_middleware import auth_middleware
+app.middleware("http")(auth_middleware)
+
+# Prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 # Dependency
 def get_vector_service(db: Session = Depends(get_db)) -> VectorService:
@@ -128,20 +160,102 @@ def _http_error_from_result(result: Dict[str, Any], not_found_codes: bool = True
         return 400
     return 200
 
+# ==================== Rate Limiting ====================
+
+if settings.RATE_LIMIT_ENABLED:
+    limiter = Limiter(
+        key_func=_rate_limit_key,
+        default_limits=[f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_TIME}seconds"]
+    )
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ==================== Request Size Limit Middleware ====================
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, max_size: int = 10 * 1024 * 1024):
+        super().__init__(app)
+        self.max_size = max_size
+
+    async def dispatch(self, request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > self.max_size:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "success": False,
+                    "request_id": getattr(request.state, "request_id", None),
+                    "error": {
+                        "code": "REQUEST_TOO_LARGE",
+                        "message": f"Request exceeds {self.max_size} byte limit"
+                    }
+                }
+            )
+        return await call_next(request)
+
 # ==================== Error Handlers ====================
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request, exc):
+    request_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=400,
+        content={
+            "success": False,
+            "error": {
+                "code": "INVALID_INPUT",
+                "message": str(exc)
+            },
+            "request_id": request_id
+        }
+    )
+
+
+@app.exception_handler(KeyError)
+async def key_error_handler(request, exc):
+    request_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=404,
+        content={
+            "success": False,
+            "error": {
+                "code": "NOT_FOUND",
+                "message": str(exc)
+            },
+            "request_id": request_id
+        }
+    )
+
+
+@app.exception_handler(PermissionError)
+async def permission_error_handler(request, exc):
+    request_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=403,
+        content={
+            "success": False,
+            "error": {
+                "code": "FORBIDDEN",
+                "message": str(exc)
+            },
+            "request_id": request_id
+        }
+    )
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """
-    Global exception handler
-    """
-    logger.error(f"Unhandled exception: {str(exc)}")
+    request_id = getattr(request.state, "request_id", None)
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
             "success": False,
-            "error": "Internal server error",
-            "detail": str(exc) if settings.DEBUG else None
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "Internal server error"
+            },
+            "request_id": request_id
         }
     )
 
@@ -191,6 +305,7 @@ async def readiness_check():
     status_code=status.HTTP_201_CREATED,
 )
 async def create_collection(
+    request: Request,
     body: CollectionCreate,
     service: CollectionService = Depends(get_collection_service),
 ):
@@ -199,6 +314,7 @@ async def create_collection(
 
     Vectors ingested into this collection must match the declared dimension.
     """
+    tenant_id = getattr(request.state, "tenant_id", None)
     result = service.create_collection(
         name=body.name,
         collection_id=body.collection_id,
@@ -207,6 +323,7 @@ async def create_collection(
         embedding_model=body.embedding_model,
         dimension=body.dimension,
         distance_metric=body.distance_metric.value,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result)
@@ -215,11 +332,13 @@ async def create_collection(
 
 @app.get("/collections", tags=["Collections"])
 async def list_collections(
+    request: Request,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     service: CollectionService = Depends(get_collection_service),
 ):
-    result = service.list_collections(limit=limit, offset=offset)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.list_collections(limit=limit, offset=offset, tenant_id=tenant_id)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result)
     return result
@@ -227,10 +346,12 @@ async def list_collections(
 
 @app.get("/collections/{collection_id}", tags=["Collections"])
 async def get_collection(
+    request: Request,
     collection_id: str,
     service: CollectionService = Depends(get_collection_service),
 ):
-    result = service.get_collection(collection_id)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.get_collection(collection_id, tenant_id=tenant_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result)
     return result
@@ -238,10 +359,12 @@ async def get_collection(
 
 @app.delete("/collections/{collection_id}", tags=["Collections"])
 async def delete_collection(
+    request: Request,
     collection_id: str,
     service: CollectionService = Depends(get_collection_service),
 ):
-    result = service.delete_collection(collection_id)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.delete_collection(collection_id, tenant_id=tenant_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result)
     return result
@@ -249,6 +372,7 @@ async def delete_collection(
 
 @app.post("/collections/{collection_id}/index", tags=["Index"])
 async def build_collection_index(
+    request: Request,
     collection_id: str,
     index_data: IndexCreate,
     service: CollectionIndexService = Depends(get_collection_index_service),
@@ -256,6 +380,7 @@ async def build_collection_index(
     """
     Build and persist an HNSW index for vectors in this collection only.
     """
+    tenant_id = getattr(request.state, "tenant_id", None)
     result = service.build_collection_index(
         collection_id=collection_id,
         method=index_data.method.value if index_data.method else "hnsw",
@@ -264,6 +389,7 @@ async def build_collection_index(
         ef_construction=index_data.ef_construction,
         n_clusters=index_data.n_clusters,
         n_probes=index_data.n_probes,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result)
@@ -272,11 +398,13 @@ async def build_collection_index(
 
 @app.get("/collections/{collection_id}/index/stats", tags=["Index"])
 async def collection_index_stats(
+    request: Request,
     collection_id: str,
     service: CollectionIndexService = Depends(get_collection_index_service),
 ):
     """Per-collection HNSW index status (on disk, loaded, graph stats)."""
-    result = service.get_collection_index_stats(collection_id)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.get_collection_index_stats(collection_id, tenant_id=tenant_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result)
     return result
@@ -289,6 +417,7 @@ async def collection_index_stats(
     status_code=status.HTTP_201_CREATED,
 )
 async def ingest_text(
+    request: Request,
     collection_id: str,
     body: TextIngestRequest,
     service: MultimodalService = Depends(get_multimodal_service),
@@ -296,11 +425,13 @@ async def ingest_text(
     """
     Embed text server-side and store as a vector in the collection.
     """
+    tenant_id = getattr(request.state, "tenant_id", None)
     result = service.ingest_text(
         collection_id=collection_id,
         text=body.text,
         metadata=body.metadata,
         vector_id=body.vector_id,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         status_code = 404 if "not found" in result.get("message", "").lower() else 400
@@ -310,6 +441,7 @@ async def ingest_text(
 
 @app.post("/collections/{collection_id}/search/text", tags=["Search"])
 async def search_collection_text(
+    request: Request,
     collection_id: str,
     body: TextSearchRequest,
     service: MultimodalService = Depends(get_multimodal_service),
@@ -317,6 +449,7 @@ async def search_collection_text(
     """
     Natural-language search: embeds query text, then searches within the collection.
     """
+    tenant_id = getattr(request.state, "tenant_id", None)
     result = service.search_text(
         collection_id=collection_id,
         query=body.query,
@@ -326,6 +459,7 @@ async def search_collection_text(
         n_probes=body.n_probes,
         use_rerank=body.use_rerank,
         filters=body.filters,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         raise HTTPException(status_code=_http_error_from_result(result), detail=result)
@@ -334,12 +468,13 @@ async def search_collection_text(
 
 @app.post("/collections/{collection_id}/search", tags=["Search"], include_in_schema=False)
 async def search_collection_text_legacy(
+    request: Request,
     collection_id: str,
     body: TextSearchRequest,
     service: MultimodalService = Depends(get_multimodal_service),
 ):
     """Deprecated alias for /search/text."""
-    return await search_collection_text(collection_id, body, service)
+    return await search_collection_text(request, collection_id, body, service)
 
 
 @app.post(
@@ -349,6 +484,7 @@ async def search_collection_text_legacy(
     status_code=status.HTTP_201_CREATED,
 )
 async def ingest_image(
+    request: Request,
     collection_id: str,
     file: UploadFile = File(...),
     metadata: Optional[str] = Form(None),
@@ -356,6 +492,7 @@ async def ingest_image(
     service: MultimodalService = Depends(get_multimodal_service),
 ):
     """Upload an image; embed with CLIP and store in the collection."""
+    tenant_id = getattr(request.state, "tenant_id", None)
     raw = await _read_upload(file)
     result = service.ingest_image(
         collection_id=collection_id,
@@ -363,6 +500,7 @@ async def ingest_image(
         filename=file.filename or "upload.jpg",
         metadata=_parse_metadata_form(metadata),
         vector_id=vector_id,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         raise HTTPException(status_code=_http_error_from_result(result), detail=result)
@@ -376,6 +514,7 @@ async def ingest_image(
     status_code=status.HTTP_201_CREATED,
 )
 async def ingest_audio(
+    request: Request,
     collection_id: str,
     file: UploadFile = File(...),
     metadata: Optional[str] = Form(None),
@@ -383,6 +522,7 @@ async def ingest_audio(
     service: MultimodalService = Depends(get_multimodal_service),
 ):
     """Upload audio; embed with librosa MFCC features and store in the collection."""
+    tenant_id = getattr(request.state, "tenant_id", None)
     raw = await _read_upload(file)
     result = service.ingest_audio(
         collection_id=collection_id,
@@ -390,6 +530,7 @@ async def ingest_audio(
         filename=file.filename or "upload.wav",
         metadata=_parse_metadata_form(metadata),
         vector_id=vector_id,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         raise HTTPException(status_code=_http_error_from_result(result), detail=result)
@@ -398,6 +539,7 @@ async def ingest_audio(
 
 @app.post("/collections/{collection_id}/search/image", tags=["Search"])
 async def search_collection_image(
+    request: Request,
     collection_id: str,
     file: UploadFile = File(...),
     k: int = Form(5),
@@ -409,6 +551,7 @@ async def search_collection_image(
     service: MultimodalService = Depends(get_multimodal_service),
 ):
     """Search by image similarity (query file embedded server-side)."""
+    tenant_id = getattr(request.state, "tenant_id", None)
     raw = await _read_upload(file)
     filters = _parse_metadata_form(metadata_filters)
     result = service.search_image(
@@ -420,6 +563,7 @@ async def search_collection_image(
         n_probes=n_probes,
         use_rerank=use_rerank,
         filters=filters,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         raise HTTPException(status_code=_http_error_from_result(result), detail=result)
@@ -428,6 +572,7 @@ async def search_collection_image(
 
 @app.post("/collections/{collection_id}/search/audio", tags=["Search"])
 async def search_collection_audio(
+    request: Request,
     collection_id: str,
     file: UploadFile = File(...),
     k: int = Form(5),
@@ -439,6 +584,7 @@ async def search_collection_audio(
     service: MultimodalService = Depends(get_multimodal_service),
 ):
     """Search by audio similarity (query file embedded server-side)."""
+    tenant_id = getattr(request.state, "tenant_id", None)
     raw = await _read_upload(file)
     filters = _parse_metadata_form(metadata_filters)
     result = service.search_audio(
@@ -450,6 +596,7 @@ async def search_collection_audio(
         n_probes=n_probes,
         use_rerank=use_rerank,
         filters=filters,
+        tenant_id=tenant_id,
     )
     if not result["success"]:
         raise HTTPException(status_code=_http_error_from_result(result), detail=result)
@@ -476,6 +623,7 @@ async def get_stored_media(content_uri: str = Query(..., description="content_ur
 @app.post("/vectors", response_model=Dict[str, Any], tags=["Vectors"],
           status_code=status.HTTP_201_CREATED)
 async def create_vector(
+    request: Request,
     vector_data: VectorCreate,
     service: VectorService = Depends(get_vector_service)
 ):
@@ -486,10 +634,12 @@ async def create_vector(
     - **metadata**: Optional metadata dictionary
     - **vector_id**: Optional custom vector ID
     """
+    tenant_id = getattr(request.state, "tenant_id", None)
     result = service.create_vector(
         vector_data=vector_data.vector,
         metadata=vector_data.metadata,
-        vector_id=vector_data.vector_id
+        vector_id=vector_data.vector_id,
+        tenant_id=tenant_id,
     )
     
     if not result["success"]:
@@ -523,6 +673,7 @@ async def create_vector_batch(
 
 @app.get("/vectors", tags=["Vectors"])
 async def get_all_vectors(
+    request: Request,
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of vectors"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     service: VectorService = Depends(get_vector_service)
@@ -533,7 +684,8 @@ async def get_all_vectors(
     - **limit**: Maximum number of vectors to return (1-1000)
     - **offset**: Offset for pagination
     """
-    result = service.get_all_vectors(limit=limit, offset=offset)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.get_all_vectors(limit=limit, offset=offset, tenant_id=tenant_id)
     
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result)
@@ -542,6 +694,7 @@ async def get_all_vectors(
 
 @app.get("/vectors/{vector_id}", tags=["Vectors"])
 async def get_vector(
+    request: Request,
     vector_id: str,
     service: VectorService = Depends(get_vector_service)
 ):
@@ -550,7 +703,8 @@ async def get_vector(
     
     - **vector_id**: Vector ID
     """
-    result = service.get_vector(vector_id)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.get_vector(vector_id, tenant_id=tenant_id)
     
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result)
@@ -584,6 +738,7 @@ async def update_vector(
 
 @app.delete("/vectors/{vector_id}", tags=["Vectors"])
 async def delete_vector(
+    request: Request,
     vector_id: str,
     service: VectorService = Depends(get_vector_service)
 ):
@@ -592,7 +747,8 @@ async def delete_vector(
     
     - **vector_id**: Vector ID
     """
-    result = service.delete_vector(vector_id)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.delete_vector(vector_id, tenant_id=tenant_id)
     
     if not result["success"]:
         raise HTTPException(status_code=404 if "not found" in result.get("message", "") else 400, 
@@ -600,10 +756,10 @@ async def delete_vector(
     
     return result
 
-# ==================== Search Operations ====================
+# ==================== Search Operations ====================@app.post("/search", response_model=Dict[str, Any], tags=["Search"])
 
-@app.post("/search", response_model=Dict[str, Any], tags=["Search"])
 async def search_vectors(
+    request: Request,
     search_data: SearchRequest,
     service: VectorService = Depends(get_vector_service)
 ):
@@ -612,12 +768,15 @@ async def search_vectors(
     
     - **query_vector**: Query vector
     - **k**: Number of results (1-100)
-    - **method**: Search method (hnsw, ivf, brute)
+    - **method**: Search method (hnsw, ivf, brute, pq, hybrid)
     - **ef_search**: HNSW search parameter
     - **n_probes**: IVF probes to search
     - **use_rerank**: IVF rerank for accuracy
+    - **cross_encoder_rerank**: Enable cross-encoder re-ranking (requires query_text)
+    - **rerank_top_k**: Candidates to send to cross-encoder (default: k*3)
     - **filters**: Optional metadata filters
     """
+    tenant_id = getattr(request.state, "tenant_id", None)
     result = service.search_vectors(
         query_vector=search_data.query_vector,
         k=search_data.k,
@@ -626,6 +785,10 @@ async def search_vectors(
         n_probes=search_data.n_probes,
         use_rerank=search_data.use_rerank,
         filters=search_data.filters,
+        cross_encoder_rerank=search_data.cross_encoder_rerank,
+        rerank_top_k=search_data.rerank_top_k,
+        query_text=search_data.query_text,
+        tenant_id=tenant_id,
     )
     
     if not result["success"]:
@@ -655,6 +818,7 @@ async def compare_search_methods(
 
 @app.post("/search/batch", tags=["Search"])
 async def batch_search(
+    request: Request,
     queries: List[SearchRequest],
     service: VectorService = Depends(get_vector_service)
 ):
@@ -663,6 +827,7 @@ async def batch_search(
     
     - **queries**: List of search requests
     """
+    tenant_id = getattr(request.state, "tenant_id", None)
     results = []
     for i, query in enumerate(queries):
         result = service.search_vectors(
@@ -673,6 +838,10 @@ async def batch_search(
             n_probes=query.n_probes,
             use_rerank=query.use_rerank,
             filters=query.filters,
+            cross_encoder_rerank=query.cross_encoder_rerank,
+            rerank_top_k=query.rerank_top_k,
+            query_text=query.query_text,
+            tenant_id=tenant_id,
         )
         results.append({
             "query_index": i,
@@ -870,6 +1039,53 @@ if INDEXER_AVAILABLE:
     logger.info("   See /docs for complete API documentation")
 else:
     logger.warning("⚠️ VectorIndexer API not available - using standard Vector API only")
+
+# ==================== RAG Routes ====================
+
+from api.routers.rag import router as rag_router
+app.include_router(rag_router, tags=["RAG"])
+logger.info("RAG API routes integrated")
+
+# ==================== Streaming RAG Routes ====================
+
+from api.routers.streaming_rag import router as streaming_rag_router
+app.include_router(streaming_rag_router)
+logger.info("Streaming RAG API routes integrated")
+
+# Auth API routes
+from api.routers.auth_api import router as auth_router
+app.include_router(auth_router, tags=["Auth"])
+logger.info("Auth API routes integrated")
+
+# Tenant API routes
+from api.routers.tenants import router as tenant_router
+app.include_router(tenant_router, tags=["Tenants"])
+logger.info("Tenant API routes integrated")
+
+# WebSocket search routes
+from api.routers.ws_search import router as ws_router
+app.include_router(ws_router, tags=["WebSocket"])
+logger.info("WebSocket search routes integrated")
+
+# ==================== Dashboard Routes ====================
+
+from api.routers.dashboard import router as dashboard_router
+from api.routers.dashboard import mount_static
+app.include_router(dashboard_router, tags=["Dashboard"])
+mount_static(app)
+logger.info("Dashboard routes integrated")
+
+# ==================== Enhanced Search Routes ====================
+
+from api.routers.search_enhanced import router as search_enhanced_router
+app.include_router(search_enhanced_router)
+logger.info("Enhanced search API routes integrated")
+
+# ==================== OpenAI-Compatible API Routes ====================
+
+from api.routers.openai_compat import router as openai_compat_router
+app.include_router(openai_compat_router, tags=["OpenAI-Compatible"])
+logger.info("OpenAI-compatible API routes integrated")
 
 if __name__ == "__main__":
     import uvicorn

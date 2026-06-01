@@ -357,17 +357,11 @@ class IVFIndex:
             raise ValueError("Index must be trained before searching")
         
         query_array = np.array(query_vector, dtype=np.float32)
-        
-        # Find closest clusters
-        cluster_distances = []
-        for cluster_id in range(self.n_clusters):
-            centroid = self.coarse_quantizer.decode(cluster_id)
-            distance = np.linalg.norm(query_array - centroid)
-            cluster_distances.append((cluster_id, distance))
-        
-        # Sort by distance and select top n_probes
-        cluster_distances.sort(key=lambda x: x[1])
-        probe_clusters = [c[0] for c in cluster_distances[:self.n_probes]]
+
+        # Find closest clusters (vectorized)
+        centroid_dists = np.linalg.norm(self.coarse_quantizer.centroids - query_array, axis=1)
+        probe_indices = np.argsort(centroid_dists)[:self.n_probes]
+        probe_clusters = probe_indices.tolist()
         
         # Search in selected clusters
         candidate_results = []

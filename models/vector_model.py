@@ -2,13 +2,24 @@ from typing import List, Dict,Any,Optional,Union
 import numpy as np
 import json
 import uuid
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-from database.schema import Vector, VectorBatch, VectorBatchMapping
+from database.schema import Vector, VectorBatch, VectorBatchMapping, VectorPgVector
+from config.settings import get_settings
+
+settings = get_settings()
 
 class VectorModel:
     def __init__(self, db: Session):
         self.db = db
+
+    def _tenant_collection_ids(self, tenant_id: str) -> List[str]:
+        """Get all collection IDs belonging to a tenant."""
+        from database.schema import Collection
+        rows = self.db.query(Collection.collection_id).filter(
+            Collection.tenant_id == tenant_id
+        ).all()
+        return [r[0] for r in rows]
     
     def clear_all_vectors(self) -> Dict[str, Any]:
         """
@@ -139,20 +150,40 @@ class VectorModel:
         """
         return self.db.query(Vector).filter(Vector.id == vector_id).first()
     
-    def get_all_vectors(self, limit: Optional[int] = 1000, offset: int = 0) -> List[Vector]:
+    def get_all_vectors(self, collection_id: str = None, offset: int = 0,
+                        limit: int = 10000, filters: dict = None,
+                        collection_ids: Optional[List[str]] = None) -> List[Vector]:
         """
-        Get all vectors with pagination
-        """
-        query = self.db.query(Vector).offset(offset)
-        if limit is not None:
-            query = query.limit(limit)
-        return query.all()
+        Get all vectors with pagination and optional collection/tenant filter.
 
-    def get_vectors_by_collection(self, collection_id: str) -> List[Vector]:
-        """Get all vectors belonging to a collection."""
+        Args:
+            collection_id: Filter by a single collection.
+            offset: Pagination offset.
+            limit: Max results.
+            filters: Metadata filter dict.
+            collection_ids: Filter by multiple collection IDs (for tenant scoping).
+        """
+        query = self.db.query(Vector)
+        if collection_id:
+            query = query.filter(Vector.collection_id == collection_id)
+        elif collection_ids is not None:
+            query = query.filter(Vector.collection_id.in_(collection_ids))
+        query = query.offset(offset).limit(limit)
+
+        results = query.all()
+
+        if filters:
+            results = [v for v in results if self._metadata_matches(v.meta_data, filters)]
+
+        return results
+
+    def get_vectors_by_collection(self, collection_id: str, offset: int = 0, limit: int = 10000) -> List[Vector]:
+        """Get all vectors belonging to a collection with pagination."""
         return (
             self.db.query(Vector)
             .filter(Vector.collection_id == collection_id)
+            .offset(offset)
+            .limit(limit)
             .all()
         )
     
@@ -234,39 +265,56 @@ class VectorModel:
     def search_vectors(self, query_vector: List[float], k: int = 5, 
                       distance_metric: str = 'cosine', 
                       filters: Dict[str, Any] = None,
-                      collection_id: str = None) -> List[Dict[str, Any]]:
+                      collection_id: str = None,
+                      tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Search for similar vectors using brute force with optional filters
+        Search for similar vectors using brute force with optional filters.
+        Accepts tenant_id to scope search to tenant-owned collections.
+        Loads vectors in batches of 1000 to avoid OOM on large datasets.
         """
-        if collection_id:
-            vectors = self.get_vectors_by_collection(collection_id)
-        else:
-            vectors = self.get_all_vectors(limit=None)
+        batch_size = 1000
+        offset = 0
+        all_results = []
 
-        results = []
-        
-        for vector in vectors:
-            if filters and not self._metadata_matches(vector.meta_data, filters):
-                continue
-            distance = self._calculate_distance(query_vector, vector.vector_data, distance_metric)
-            results.append({
-                "distance": distance,
-                "vector_id": vector.vector_id,
-                "metadata": vector.meta_data,
-                "meta_data": vector.meta_data,
-                "collection_id": vector.collection_id,
-                "vector": vector.vector_data,
-                "created_at": vector.created_at
-            })
-        
-        # Sort by distance and return top k
-        results.sort(key=lambda x: x["distance"])
-        return results[:k]
+        # Determine collection IDs to filter by
+        ids_to_filter = None
+        if collection_id:
+            ids_to_filter = [collection_id]
+        elif tenant_id:
+            ids_to_filter = self._tenant_collection_ids(tenant_id)
+
+        while True:
+            batch = self.get_all_vectors(
+                collection_id=None if ids_to_filter is None or len(ids_to_filter) != 1 else ids_to_filter[0],
+                offset=offset, limit=batch_size, filters=filters,
+                collection_ids=ids_to_filter,
+            )
+            if not batch:
+                break
+
+            for vector in batch:
+                distance = self._calculate_distance(query_vector, vector.vector_data, distance_metric)
+                all_results.append({
+                    "distance": distance,
+                    "vector_id": vector.vector_id,
+                    "metadata": vector.meta_data,
+                    "meta_data": vector.meta_data,
+                    "collection_id": vector.collection_id,
+                    "vector": vector.vector_data,
+                    "created_at": vector.created_at
+                })
+
+            offset += batch_size
+
+        all_results.sort(key=lambda x: x["distance"])
+        return all_results[:k]
 
     def _metadata_matches(self, meta_data: Optional[Dict[str, Any]], filters: Dict[str, Any]) -> bool:
         if not meta_data:
             return False
         for key, value in filters.items():
+            if isinstance(value, dict):
+                return True
             if meta_data.get(key) != value:
                 return False
         return True
@@ -322,3 +370,63 @@ class VectorModel:
         return self.search_vectors(
             query_vector, k, distance_metric, filters, collection_id
         )
+
+
+class VectorPgVectorModel:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create_vector(self, vector_data: List[float], metadata: Dict[str, Any] = None,
+                      vector_id: str = None, collection_id: str = None,
+                      content_type: str = None) -> VectorPgVector:
+        if vector_id is None:
+            vector_id = f"vec_{uuid.uuid4().hex[:12]}"
+
+        vector = VectorPgVector(
+            vector=vector_data,
+            meta_data=metadata,
+            vector_id=vector_id,
+            collection_id=collection_id,
+            content_type=content_type,
+        )
+        self.db.add(vector)
+        self.db.commit()
+        self.db.refresh(vector)
+        return vector
+
+    def get_vector(self, vector_id: str) -> Optional[VectorPgVector]:
+        return self.db.query(VectorPgVector).filter(VectorPgVector.vector_id == vector_id).first()
+
+    def delete_vector(self, vector_id: str) -> bool:
+        vector = self.get_vector(vector_id)
+        if vector:
+            self.db.delete(vector)
+            self.db.commit()
+            return True
+        return False
+
+    def get_vector_count(self) -> int:
+        return self.db.query(func.count(VectorPgVector.id)).scalar()
+
+    def search_vectors(self, query_vector: List[float], k: int = 10,
+                       collection_id: str = None) -> List[Dict[str, Any]]:
+        qv = json.dumps(query_vector.tolist() if isinstance(query_vector, np.ndarray) else query_vector)
+        sql = "SELECT *, vector <=> :query AS distance FROM vectors_pgvector ORDER BY distance LIMIT :k"
+        params = {"query": qv, "k": k}
+
+        if collection_id:
+            sql = "SELECT *, vector <=> :query AS distance FROM vectors_pgvector WHERE collection_id = :cid ORDER BY distance LIMIT :k"
+            params = {"query": qv, "k": k, "cid": collection_id}
+
+        rows = self.db.execute(text(sql), params).fetchall()
+        results = []
+        for row in rows:
+            results.append({
+                "distance": float(row.distance),
+                "vector_id": row.vector_id,
+                "metadata": row.meta_data,
+                "meta_data": row.meta_data,
+                "collection_id": row.collection_id,
+                "created_at": row.created_at,
+            })
+        return results

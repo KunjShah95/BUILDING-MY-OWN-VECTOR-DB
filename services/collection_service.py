@@ -39,6 +39,7 @@ class CollectionService:
         embedding_model: Optional[str] = None,
         dimension: Optional[int] = None,
         distance_metric: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         try:
             slug = self._normalize_slug(collection_id) if collection_id else self._slug_from_name(name)
@@ -73,6 +74,7 @@ class CollectionService:
                 embedding_model=model_name,
                 dimension=dim,
                 distance_metric=metric,
+                tenant_id=tenant_id,
             )
             self.db.add(record)
             self.db.commit()
@@ -87,28 +89,25 @@ class CollectionService:
             self.db.rollback()
             return {"success": False, "message": f"Error creating collection: {exc}"}
 
-    def get_collection(self, collection_id: str) -> Dict[str, Any]:
+    def get_collection(self, collection_id: str, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         try:
-            record = (
-                self.db.query(Collection)
-                .filter(Collection.collection_id == self._normalize_slug(collection_id))
-                .first()
-            )
+            slug = self._normalize_slug(collection_id)
+            query = self.db.query(Collection).filter(Collection.collection_id == slug)
+            if tenant_id:
+                query = query.filter(Collection.tenant_id == tenant_id)
+            record = query.first()
             if not record:
                 return {"success": False, "message": "Collection not found"}
             return {"success": True, "collection": record.to_dict()}
         except Exception as exc:
             return {"success": False, "message": f"Error getting collection: {exc}"}
 
-    def list_collections(self, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
+    def list_collections(self, limit: int = 100, offset: int = 0, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         try:
-            rows = (
-                self.db.query(Collection)
-                .order_by(Collection.created_at.desc())
-                .offset(offset)
-                .limit(limit)
-                .all()
-            )
+            query = self.db.query(Collection).order_by(Collection.created_at.desc())
+            if tenant_id:
+                query = query.filter(Collection.tenant_id == tenant_id)
+            rows = query.offset(offset).limit(limit).all()
             return {
                 "success": True,
                 "collections": [row.to_dict() for row in rows],
@@ -119,12 +118,13 @@ class CollectionService:
         except Exception as exc:
             return {"success": False, "message": f"Error listing collections: {exc}"}
 
-    def delete_collection(self, collection_id: str) -> Dict[str, Any]:
+    def delete_collection(self, collection_id: str, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         try:
             slug = self._normalize_slug(collection_id)
-            record = (
-                self.db.query(Collection).filter(Collection.collection_id == slug).first()
-            )
+            query = self.db.query(Collection).filter(Collection.collection_id == slug)
+            if tenant_id:
+                query = query.filter(Collection.tenant_id == tenant_id)
+            record = query.first()
             if not record:
                 return {"success": False, "message": "Collection not found"}
 
@@ -149,9 +149,9 @@ class CollectionService:
             return {"success": False, "message": f"Error deleting collection: {exc}"}
 
     def validate_vector_dimension(
-        self, collection_id: str, vector_data: List[float]
+        self, collection_id: str, vector_data: List[float], tenant_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        result = self.get_collection(collection_id)
+        result = self.get_collection(collection_id, tenant_id=tenant_id)
         if not result.get("success"):
             return result
 
