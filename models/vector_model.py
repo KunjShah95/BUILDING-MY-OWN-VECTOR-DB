@@ -150,19 +150,8 @@ class VectorModel:
         """
         return self.db.query(Vector).filter(Vector.id == vector_id).first()
     
-<<<<<<< HEAD
-    def get_all_vectors(self, collection_id: str = None, offset: int = 0, limit: int = 10000, filters: dict = None) -> List[Vector]:
-        """
-        Get all vectors with pagination and optional collection filter
-        """
-        query = self.db.query(Vector)
-        if collection_id:
-            query = query.filter(Vector.collection_id == collection_id)
-        query = query.offset(offset).limit(limit)
 
-=======
-    def get_all_vectors(self, collection_id: str = None, offset: int = 0,
-                        limit: int = 10000, filters: dict = None,
+    def get_all_vectors(self, collection_id: str = None, offset: int = 0, limit: int = 10000, filters: dict = None,
                         collection_ids: Optional[List[str]] = None) -> List[Vector]:
         """
         Get all vectors with pagination and optional collection/tenant filter.
@@ -180,8 +169,6 @@ class VectorModel:
         elif collection_ids is not None:
             query = query.filter(Vector.collection_id.in_(collection_ids))
         query = query.offset(offset).limit(limit)
-
->>>>>>> main
         results = query.all()
 
         if filters:
@@ -280,28 +267,17 @@ class VectorModel:
                       collection_id: str = None,
                       tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-<<<<<<< HEAD
-        Search for similar vectors using brute force with optional filters
-        Loads vectors in batches of 1000 to avoid OOM on large datasets
-=======
         Search for similar vectors using brute force with optional filters.
         Accepts tenant_id to scope search to tenant-owned collections.
         Loads vectors in batches of 1000 to avoid OOM on large datasets.
->>>>>>> main
         """
         batch_size = 1000
         offset = 0
         all_results = []
 
-<<<<<<< HEAD
-        while True:
-            batch = self.get_all_vectors(collection_id, offset=offset, limit=batch_size, filters=filters)
-=======
-        # Determine collection IDs to filter by
+        # Scope to tenant collections if tenant_id provided
         ids_to_filter = None
-        if collection_id:
-            ids_to_filter = [collection_id]
-        elif tenant_id:
+        if tenant_id:
             ids_to_filter = self._tenant_collection_ids(tenant_id)
 
         while True:
@@ -310,7 +286,6 @@ class VectorModel:
                 offset=offset, limit=batch_size, filters=filters,
                 collection_ids=ids_to_filter,
             )
->>>>>>> main
             if not batch:
                 break
 
@@ -336,7 +311,7 @@ class VectorModel:
             return False
         for key, value in filters.items():
             if isinstance(value, dict):
-                return True
+                continue
             if meta_data.get(key) != value:
                 return False
         return True

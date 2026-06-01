@@ -1,12 +1,7 @@
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-<<<<<<< HEAD
-from database.schema import Vector, VectorBatch, VectorBatchMapping
-from models.vector_model import VectorModel, VectorPgVectorModel
-=======
 from database.schema import Vector, VectorBatch, VectorBatchMapping, Collection
-from models.vector_model import VectorModel
->>>>>>> main
+from models.vector_model import VectorModel, VectorPgVectorModel
 from database.hnsw_database import HNSWVectorDatabase
 from database.ivf_database import IVFVectorDatabase
 from services.collection_service import CollectionService
@@ -374,13 +369,10 @@ class VectorService:
         collection_id: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         distance_metric: Optional[str] = None,
-<<<<<<< HEAD
         cross_encoder_rerank: bool = False,
         rerank_top_k: Optional[int] = None,
         query_text: Optional[str] = None,
-=======
         tenant_id: Optional[str] = None,
->>>>>>> main
     ) -> Dict[str, Any]:
         """
         Search for similar vectors
@@ -390,13 +382,10 @@ class VectorService:
             k: Number of results
             method: Search method
             ef_search: HNSW search parameter
-<<<<<<< HEAD
             cross_encoder_rerank: Enable cross-encoder re-ranking
             rerank_top_k: Candidates to send to cross-encoder
             query_text: Original text query (required for cross-encoder)
-=======
             tenant_id: Optional tenant scope (validates collection ownership)
->>>>>>> main
 
         Returns:
             Search results
@@ -405,7 +394,6 @@ class VectorService:
             start_time = time.time()
             metric = distance_metric or "cosine"
 
-<<<<<<< HEAD
             # Determine effective k for initial ANN search
             # If cross-encoder reranking is enabled, fetch more candidates
             # so re-ranking has a larger pool to pick from
@@ -414,23 +402,6 @@ class VectorService:
                 effective_k = rerank_top_k or (k * 3)
                 effective_k = min(effective_k, 500)  # cap for safety
 
-            if settings.USE_PGVECTOR and self.pgvector_model is not None:
-                results = self.pgvector_model.search_vectors(
-                    query_vector, effective_k, collection_id=collection_id
-                )
-                search_time = time.time() - start_time
-                return {
-                    "success": True,
-                    "query_vector": query_vector,
-                    "results": results,
-                    "total_results": len(results),
-                    "search_time": search_time,
-                    "method": "pgvector",
-                    "collection_id": collection_id,
-                }
-
-            # Collection-scoped search
-=======
             # Tenant scope validation
             if tenant_id:
                 if collection_id:
@@ -460,8 +431,22 @@ class VectorService:
                         "method": "brute_force_tenant",
                     }
 
+            if settings.USE_PGVECTOR and self.pgvector_model is not None:
+                results = self.pgvector_model.search_vectors(
+                    query_vector, effective_k, collection_id=collection_id
+                )
+                search_time = time.time() - start_time
+                return {
+                    "success": True,
+                    "query_vector": query_vector,
+                    "results": results,
+                    "total_results": len(results),
+                    "search_time": search_time,
+                    "method": "pgvector",
+                    "collection_id": collection_id,
+                }
+
             # Collection-scoped search: prefer collection HNSW, else brute force.
->>>>>>> main
             if collection_id:
                 if method == "hnsw" and self.hnsw_db.get_hnsw_index(collection_id):
                     result = self.hnsw_db.search_hnsw(
@@ -566,7 +551,7 @@ class VectorService:
             elif method == "hybrid":
                 result = self._hybrid_search(
                     query_vector=query_vector,
-                    query_text=filters.get("query_text", "") if filters else "",
+                    query_text=query_text or (filters.get("query_text", "") if filters else ""),
                     k=k,
                     ef_search=ef_search,
                     filters=filters,
