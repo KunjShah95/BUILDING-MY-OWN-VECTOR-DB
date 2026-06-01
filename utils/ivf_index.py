@@ -54,8 +54,8 @@ class CoarseQuantizer:
         if self.centroids is None:
             raise ValueError("Quantizer not trained")
             
-        distances = [np.linalg.norm(vector - centroid) for centroid in self.centroids]
-        return np.argmin(distances)
+        distances = np.linalg.norm(self.centroids - vector, axis=1)
+        return int(np.argmin(distances))
     
     def encode_batch(self, vectors: np.ndarray) -> np.ndarray:
         """
@@ -70,12 +70,9 @@ class CoarseQuantizer:
         if self.centroids is None:
             raise ValueError("Quantizer not trained")
             
-        cluster_ids = []
-        for vector in vectors:
-            distances = [np.linalg.norm(vector - centroid) for centroid in self.centroids]
-            cluster_ids.append(np.argmin(distances))
-            
-        return np.array(cluster_ids)
+        diff = vectors[:, np.newaxis, :] - self.centroids[np.newaxis, :, :]
+        distances = np.sqrt(np.sum(diff ** 2, axis=2))
+        return np.argmin(distances, axis=1).astype(np.int32)
     
     def decode(self, cluster_id: int) -> np.ndarray:
         """
@@ -179,9 +176,9 @@ class FineQuantizer:
             
             sub_vector = residual[start_idx:end_idx]
             
-            # Find nearest code in codebook
-            distances = [np.linalg.norm(sub_vector - code) for code in codebook]
-            code = np.argmin(distances)
+            # Find nearest code in codebook (vectorized)
+            distances = np.linalg.norm(codebook - sub_vector, axis=1)
+            code = int(np.argmin(distances))
             codes.append(code)
             
         return codes
@@ -425,16 +422,35 @@ class IVFIndex:
         candidates.sort(key=lambda x: x["distance"])
         return candidates[:k]
     
-    def save(self, filepath: str):
+    def save(self, filepath: str, format: str = "json"):
         """
         Save the index to disk
         
         Args:
             filepath: Path to save the index
+            format: Serialization format ("json" or "binary")
         """
-        # Helper function to convert numpy types to Python native types for JSON serialization
+        if format == "binary":
+            import pickle
+            data = {
+                "n_clusters": self.n_clusters,
+                "n_probes": self.n_probes,
+                "is_trained": self.is_trained,
+                "coarse_centroids": self.coarse_quantizer.centroids,
+                "codebooks": self.fine_quantizer.codebooks,
+                "inverted_file": dict(self.inverted_file),
+                "vectors": {k: v for k, v in self.vectors.items()},
+                "residuals": self.residuals,
+                "metadata": self.metadata,
+                "vector_ids": self.vector_ids,
+            }
+            with open(filepath, 'wb') as f:
+                pickle.dump(data, f)
+            print(f"Index saved to {filepath} (binary)")
+            return
+        
+        # Default JSON serialization
         def convert_numpy_types(obj):
-            """Recursively convert numpy types to Python native types"""
             if isinstance(obj, dict):
                 return {str(k): convert_numpy_types(v) for k, v in obj.items()}
             elif isinstance(obj, (list, tuple)):
@@ -447,7 +463,6 @@ class IVFIndex:
                 return obj.tolist()
             return obj
         
-        # Convert numpy int64 keys and values to serializable types
         inverted_file_serializable = {str(k): convert_numpy_types(v) for k, v in self.inverted_file.items()}
         residuals_serializable = convert_numpy_types(self.residuals)
         
@@ -476,8 +491,15 @@ class IVFIndex:
         Args:
             filepath: Path to load the index from
         """
-        with open(filepath, 'r') as f:
-            index_data = json.load(f)
+        is_binary = filepath.endswith('.pkl') or filepath.endswith('.pickle')
+        
+        if is_binary:
+            import pickle
+            with open(filepath, 'rb') as f:
+                index_data = pickle.load(f)
+        else:
+            with open(filepath, 'r') as f:
+                index_data = json.load(f)
         
         self.n_clusters = index_data["n_clusters"]
         self.n_probes = index_data["n_probes"]

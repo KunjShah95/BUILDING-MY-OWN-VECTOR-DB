@@ -1,0 +1,24 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}
+{{- else }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "vector-db.name" . }}" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT={{ .Values.service.port }}
+  echo "Visit http://127.0.0.1:8000 to use your application"
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8000:$CONTAINER_PORT
+{{- end }}
+
+2. Verify the API is running:
+   curl http://127.0.0.1:8000/health
+
+3. Access the API documentation:
+   http://127.0.0.1:8000/docs
+
+4. Monitor the deployment:
+   kubectl get pods --namespace {{ .Release.Namespace }} -w
+   kubectl logs --namespace {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "vector-db.name" . }}
+
+WARNING: PostgreSQL password is stored in a Kubernetes Secret.
+  Name: {{ include "vector-db.fullname" . }}
+  Key:  postgres-password
+  Retrieve: kubectl get secret {{ include "vector-db.fullname" . }} -o jsonpath="{.data.postgres-password}" | base64 -d

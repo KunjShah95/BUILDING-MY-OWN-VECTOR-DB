@@ -21,6 +21,13 @@ def get_ivf_path(collection_id: Optional[str] = None) -> str:
     return "ivf_index_data.json"
 
 
+
+def get_pq_path(collection_id: Optional[str] = None) -> str:
+    if collection_id:
+        return os.path.join(get_index_dir(collection_id), "pq_index.json")
+    return "pq_index_data.json"
+
+
 def ensure_index_dir(collection_id: Optional[str] = None) -> str:
     directory = get_index_dir(collection_id)
     if collection_id:

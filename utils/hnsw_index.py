@@ -125,50 +125,36 @@ class HNSWIndex:
         Returns:
             List of (node_id, distance) tuples
         """
-        # Use set to track visited nodes
         visited: Set[str] = set()
         
-        # Priority queue for best-first search (min-heap)
-        # Elements are (-distance, node_id) for max-heap behavior
-        pq: List[Tuple[float, str]] = []
+        # Min-heap for candidates (exploration frontier, closest first)
+        candidates: List[Tuple[float, str]] = []
+        # Max-heap for results (negative distance for max-heap behavior)
+        results: List[Tuple[float, str]] = []
         
-        # Start from entry point
         if node_id not in self.graph:
             return []
         
         start_node = self.graph[node_id]
         start_distance = self._distance(query_vector, start_node.vector)
-        heapq.heappush(pq, (start_distance, node_id))
+        heapq.heappush(candidates, (start_distance, node_id))
         visited.add(node_id)
         
-        # Results set
-        result_set: Set[str] = set()
-        
-        while pq:
-            # Get the closest node
-            distance, current_id = heapq.heappop(pq)
+        while candidates:
+            distance, current_id = heapq.heappop(candidates)
             
-            # Check if we should continue
-            if result_set and distance > max(self._distance(query_vector, self.graph[n].vector) 
-                                            for n in result_set):
-                break
-            
-            # Add to result set
-            result_set.add(current_id)
-            
-            # If we have enough results, check termination condition
-            if len(result_set) >= ef:
-                # Check if the furthest result is closer than any unexplored node
-                if not pq:
+            # Termination: closest remaining candidate is >= farthest result
+            if results:
+                farthest_distance = -results[0][0]
+                if distance >= farthest_distance:
                     break
-                    
-                # Get the worst distance in result set
-                worst_result_dist = max(self._distance(query_vector, self.graph[n].vector) 
-                                       for n in result_set)
-                
-                # If the next node in queue is worse, we can stop
-                if pq[0][0] >= worst_result_dist:
-                    break
+            
+            # Add to results
+            heapq.heappush(results, (-distance, current_id))
+            
+            # If we have more than ef results, pop farthest
+            if len(results) > ef:
+                heapq.heappop(results)
             
             # Explore neighbors
             current_node = self.graph[current_id]
@@ -178,16 +164,13 @@ class HNSWIndex:
                         visited.add(neighbor_id)
                         neighbor = self.graph[neighbor_id]
                         neighbor_dist = self._distance(query_vector, neighbor.vector)
-                        
-                        # Always add to queue
-                        heapq.heappush(pq, (neighbor_dist, neighbor_id))
+                        heapq.heappush(candidates, (neighbor_dist, neighbor_id))
         
-        # Convert result set to sorted list
-        results = [(nid, self._distance(query_vector, self.graph[nid].vector)) 
-                  for nid in result_set]
-        results.sort(key=lambda x: x[1])
+        # Convert results to sorted list
+        sorted_results = [(nid, -neg_dist) for neg_dist, nid in results]
+        sorted_results.sort(key=lambda x: x[1])
         
-        return results
+        return sorted_results
     
     def _select_neighbors(self, query_vector: np.ndarray, candidates: List[str], 
                          m: int, level: int) -> List[str]:
@@ -277,7 +260,7 @@ class HNSWIndex:
                 neighbor.neighbors[level].append(node_id)
                 self.total_inserted += 1
         
-        return ep_node_id
+        return search_results[0][0] if search_results else ep_node_id
     
     def insert(self, vector: List[float], vector_id: str, 
               metadata: Dict[str, Any] = None, level: int = None):
@@ -311,24 +294,23 @@ class HNSWIndex:
         # Start from entry point
         ep = self.entry_point
         
-        # Connect at each level from max_level down to level+1
+        # Navigate down from max_level to level+1 (ef=1, no connections)
         for l in range(self.max_level, level, -1):
             if ep is not None:
-                ep = self._search_layer(
-                    vector_array,
-                    1,  # ef = 1 for navigation
-                    ep,
-                    l
-                )[0][0] if self._search_layer(vector_array, 1, ep, l) else ep
-        
-        # Connect at level
+                search_results = self._search_layer(vector_array, 1, ep, l)
+                if search_results:
+                    ep = search_results[0][0]
+
+        # Connect at each level from level down to 0
         if ep is not None:
-            self._connect_node(vector_id, level, ep)
+            for l in range(level, -1, -1):
+                ep = self._connect_node(vector_id, l, ep)
         else:
             self.entry_point = vector_id
-        
-        # Connect at level 0 (with more neighbors)
-        self._connect_node(vector_id, 0, self.entry_point)
+            # Initialize neighbor structure for the first node
+            self._connect_node(vector_id, 0, self.entry_point)
+            if level > 0:
+                self._connect_node(vector_id, level, self.entry_point)
     
     def insert_batch(self, vectors: List[Dict[str, Any]]):
         """
@@ -534,14 +516,41 @@ class HNSWIndex:
             "entry_point": self.entry_point
         }
     
-    def save(self, filepath: str):
+    def save(self, filepath: str, format: str = "json"):
         """
         Save the index to disk
         
         Args:
             filepath: Path to save the index
+            format: Serialization format ("json" or "binary")
         """
-        # Helper function to make objects JSON serializable
+        if format == "binary":
+            import pickle
+            graph_data = {}
+            for node_id, node in self.graph.items():
+                graph_data[node_id] = {
+                    "node_id": node.node_id,
+                    "vector": node.vector,
+                    "neighbors": node.neighbors,
+                    "metadata": self.metadata.get(node_id)
+                }
+            data = {
+                "m": self.m,
+                "m0": self.m0,
+                "ef_construction": self.ef_construction,
+                "level_mult": self.level_mult,
+                "distance_metric": self.distance_metric,
+                "entry_point": self.entry_point,
+                "max_level": self.max_level,
+                "total_inserted": self.total_inserted,
+                "graph": graph_data
+            }
+            with open(filepath, 'wb') as f:
+                pickle.dump(data, f)
+            print(f"HNSW Index saved to {filepath} (binary)")
+            return
+        
+        # Default JSON serialization
         def make_serializable(obj):
             if obj is None:
                 return None
@@ -551,17 +560,12 @@ class HNSWIndex:
                 return [make_serializable(item) for item in obj]
             if isinstance(obj, dict):
                 return {str(k): make_serializable(v) for k, v in obj.items()}
-            # Convert other types to string
             return str(obj)
         
-        # Convert graph to serializable format
         graph_data = {}
-        
         for node_id, node in self.graph.items():
-            # Convert metadata to serializable format
             metadata = self.metadata.get(node_id)
             serializable_metadata = make_serializable(metadata) if metadata else None
-            
             graph_data[node_id] = {
                 "node_id": node.node_id,
                 "vector": node.vector.tolist(),
@@ -596,31 +600,49 @@ class HNSWIndex:
         Returns:
             self
         """
-        with open(filepath, 'r') as f:
-            index_data = json.load(f)
+        # Detect format from file extension or content
+        is_binary = filepath.endswith('.pkl') or filepath.endswith('.pickle')
         
-        # Restore parameters
-        self.m = index_data["m"]
-        self.m0 = index_data["m0"]
-        self.ef_construction = index_data["ef_construction"]
-        self.level_mult = index_data["level_mult"]
-        self.distance_metric = index_data.get("distance_metric", self.distance_metric)
-        self.entry_point = index_data["entry_point"]
-        self.max_level = index_data["max_level"]
-        self.total_inserted = index_data["total_inserted"]
+        if is_binary:
+            import pickle
+            with open(filepath, 'rb') as f:
+                data = pickle.load(f)
+        else:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
         
-        # Rebuild graph
-        for node_id, node_data in index_data["graph"].items():
-            vector_array = np.array(node_data["vector"], dtype=np.float32)
-            vector_array = self._normalize_vector(vector_array)
-            node = Node(
-                node_id=node_data["node_id"],
-                vector=vector_array
-            )
-            node.neighbors = {int(k): v for k, v in node_data["neighbors"].items()}
-            self.graph[node_id] = node
-            self.vectors[node_id] = node.vector
-            self.metadata[node_id] = node_data.get("metadata")
+        self.m = data["m"]
+        self.m0 = data["m0"]
+        self.ef_construction = data["ef_construction"]
+        self.level_mult = data["level_mult"]
+        self.distance_metric = data.get("distance_metric", self.distance_metric)
+        self.entry_point = data["entry_point"]
+        self.max_level = data["max_level"]
+        self.total_inserted = data["total_inserted"]
+        
+        if is_binary:
+            for node_id, node_data in data["graph"].items():
+                vector_array = self._normalize_vector(node_data["vector"])
+                node = Node(
+                    node_id=node_data["node_id"],
+                    vector=vector_array
+                )
+                node.neighbors = node_data["neighbors"]
+                self.graph[node_id] = node
+                self.vectors[node_id] = node.vector
+                self.metadata[node_id] = node_data.get("metadata")
+        else:
+            for node_id, node_data in data["graph"].items():
+                vector_array = np.array(node_data["vector"], dtype=np.float32)
+                vector_array = self._normalize_vector(vector_array)
+                node = Node(
+                    node_id=node_data["node_id"],
+                    vector=vector_array
+                )
+                node.neighbors = {int(k): v for k, v in node_data["neighbors"].items()}
+                self.graph[node_id] = node
+                self.vectors[node_id] = node.vector
+                self.metadata[node_id] = node_data.get("metadata")
         
         print(f"HNSW Index loaded from {filepath}")
         

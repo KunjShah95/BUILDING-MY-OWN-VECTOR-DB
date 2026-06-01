@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional, Union
 from sqlalchemy.orm import Session
 from database.schema import Vector, VectorBatch, VectorBatchMapping
 from models.vector_model import VectorModel
-from utils.clustering import VectorIndexer
+from services.vector_indexer import KMeansIndexer
 import numpy as np
 from datetime import datetime
 
@@ -88,7 +88,7 @@ class VectorDatabase:
             vector_ids = [vector.vector_id for vector in vectors_data]
 
             # Create indexer
-            self.indexer = VectorIndexer(k=k)
+            self.indexer = KMeansIndexer(k=k)
             self.indexer.fit(vector_arrays, vector_ids)
 
             self.is_indexed = True

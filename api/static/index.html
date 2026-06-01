@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vector DB Dashboard</title>
+<link rel="stylesheet" href="/dashboard/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="logo">VectorDB</div>
+  <ul>
+    <li class="active" data-tab="overview">Overview</li>
+    <li data-tab="search">Search</li>
+    <li data-tab="similarity">Similarity Explorer</li>
+    <li data-tab="collections">Collections</li>
+  </ul>
+</nav>
+<main class="content">
+  <header><h1 id="page-title">Overview</h1></header>
+
+  <section id="tab-overview" class="tab active">
+    <div class="stats-grid">
+      <div class="stat-card"><h3>Total Vectors</h3><p id="stat-vectors">--</p></div>
+      <div class="stat-card"><h3>Collections</h3><p id="stat-collections">--</p></div>
+      <div class="stat-card"><h3>Avg Latency</h3><p id="stat-latency">--</p></div>
+      <div class="stat-card"><h3>HNSW Index</h3><p id="stat-hnsw">--</p></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-container">
+        <h2>Query Latency by Method</h2>
+        <canvas id="latency-chart"></canvas>
+      </div>
+      <div class="chart-container">
+        <h2>Index Distribution</h2>
+        <canvas id="index-chart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-search" class="tab">
+    <div class="search-box">
+      <input type="text" id="search-query" placeholder="Enter search text..." />
+      <input type="number" id="search-k" value="5" min="1" max="100" />
+      <select id="search-method">
+        <option value="hnsw">HNSW</option>
+        <option value="ivf">IVF</option>
+        <option value="brute">Brute Force</option>
+      </select>
+      <button id="search-btn">Search</button>
+    </div>
+    <div id="search-info" class="info-bar"></div>
+    <div id="search-results" class="results"></div>
+  </section>
+
+  <section id="tab-similarity" class="tab">
+    <div class="search-box">
+      <input type="text" id="sim-query" placeholder="Enter seed text for similarity exploration..." />
+      <input type="number" id="sim-k" value="20" min="2" max="100" />
+      <button id="sim-btn">Explore</button>
+    </div>
+    <div class="viz-container">
+      <p class="viz-hint">Similarity map: closer points = more similar vectors</p>
+      <canvas id="sim-chart"></canvas>
+    </div>
+    <div id="sim-results" class="results"></div>
+  </section>
+
+  <section id="tab-collections" class="tab">
+    <div class="coll-actions">
+      <input type="text" id="coll-name" placeholder="Collection name" />
+      <select id="coll-modality">
+        <option value="text">Text</option>
+        <option value="image">Image</option>
+        <option value="audio">Audio</option>
+        <option value="multimodal">Multimodal</option>
+      </select>
+      <button id="coll-create-btn">Create</button>
+    </div>
+    <div id="coll-list" class="coll-list"></div>
+  </section>
+</main>
+<script src="/dashboard/static/app.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ Supports HNSW and IVF indexing methods with automatic parameter optimization
 
 from typing import List, Dict, Any, Optional, Union, Tuple
 from enum import Enum
+from collections import defaultdict
 import numpy as np
 import json
 import os
@@ -13,6 +14,7 @@ import time
 
 from utils.hnsw_index import HNSWIndex
 from utils.ivf_index import IVFIndex
+from utils.clustering import KMeans
 from utils.optimization import (
     OptimizedDistanceCalculator, 
     VectorBatchProcessor,
@@ -580,7 +582,7 @@ class VectorIndexer:
                 "ef_construction": best_config[1],
                 "score": best_score
             }
-            
+
             return {
                 "success": True,
                 "results": results
@@ -590,3 +592,71 @@ class VectorIndexer:
                 "success": False,
                 "error": str(e)
             }
+
+
+class KMeansIndexer:
+    """K-Means-based search indexer (simplified IVF using KMeans clustering)."""
+
+    def __init__(self, k: int = 100):
+        self.k = k
+        self.kmeans = None
+        self.clusters = defaultdict(list)
+        self.centroids = None
+
+    def fit(self, vectors: List[np.ndarray], vector_ids: List[str] = None) -> "KMeansIndexer":
+        if isinstance(vectors[0], list):
+            vectors = np.array(vectors)
+        self.kmeans = KMeans(k=self.k)
+        self.kmeans.fit(vectors)
+        self.centroids = self.kmeans.get_cluster_centers()
+        labels = self.kmeans.get_labels()
+        for i, (vector, label) in enumerate(zip(vectors, labels)):
+            vector_id = vector_ids[i] if vector_ids else f"vector_{i}"
+            self.clusters[label].append({
+                "vector_id": vector_id,
+                "vector": vector,
+                "index": i,
+            })
+        return self
+
+    def get_closest_cluster(self, query_vector: np.ndarray) -> int:
+        if self.centroids is None:
+            raise ValueError("Indexer must be fitted before querying")
+        distances = [np.linalg.norm(query_vector - c) for c in self.centroids]
+        return np.argmin(distances)
+
+    def search_in_cluster(self, query_vector: np.ndarray, cluster_id: int, k: int = 5) -> List[Dict[str, Any]]:
+        if cluster_id not in self.clusters:
+            return []
+        results = []
+        for vi in self.clusters[cluster_id]:
+            d = np.linalg.norm(query_vector - vi["vector"])
+            results.append({"vector_id": vi["vector_id"], "distance": float(d), "vector": vi["vector"].tolist()})
+        results.sort(key=lambda x: x["distance"])
+        return results[:k]
+
+    def search(self, query_vector: np.ndarray, k: int = 5, n_probes: int = 10) -> List[Dict[str, Any]]:
+        if self.centroids is None:
+            raise ValueError("Indexer must be fitted before querying")
+        distances = [np.linalg.norm(query_vector - c) for c in self.centroids]
+        ordered = sorted(enumerate(distances), key=lambda x: x[1])[:n_probes]
+        all_results = []
+        for cid, _ in ordered:
+            all_results.extend(self.search_in_cluster(query_vector, cid, k))
+        all_results.sort(key=lambda x: x["distance"])
+        return all_results[:k]
+
+    def get_cluster_info(self) -> Dict[str, Any]:
+        if self.centroids is None:
+            return {}
+        return {
+            "total_clusters": self.k,
+            "cluster_sizes": [len(v) for v in self.clusters.values()],
+            "centroids": self.centroids.tolist(),
+        }
+
+    def get_cluster_vectors(self, cluster_id: int) -> List[Dict[str, Any]]:
+        return self.clusters.get(cluster_id, [])
+
+    def get_all_clusters(self) -> Dict[int, List[Dict[str, Any]]]:
+        return dict(self.clusters)

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     DEFAULT_N_CLUSTERS: int = 100
     DEFAULT_N_PROBES: int = 10
 
+    # pgvector toggle
+    USE_PGVECTOR: bool = False
+
     # Text embedding
     DEFAULT_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     DEFAULT_TEXT_DIMENSION: int = 384
@@ -41,17 +44,25 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 22050
     AUDIO_MAX_DURATION_SEC: float = 30.0
 
-    MEDIA_STORAGE_PATH: str = "media_storage"
+    MEDIA_STORAGE_PATH: str = "media_storage"
+
+    STORAGE_PROVIDER: str = "local"
 
     # Security settings
     API_KEY: str = "your-api-key-here"
     ALLOWED_HOSTS: List[str] = ["*"]
 
     # Rate limiting
-    RATE_LIMIT_REQUESTS: int = 100
-    RATE_LIMIT_TIME: int = 60
-
-    class Config:
+    RATE_LIMIT_REQUESTS: int = 100
+
+    RATE_LIMIT_TIME: int = 60
+
+    RATE_LIMIT_ENABLED: bool = True
+
+    RATE_LIMIT_BACKEND: str = "memory"
+
+
+    class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
 

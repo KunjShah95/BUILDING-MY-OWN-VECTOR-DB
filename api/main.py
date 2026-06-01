@@ -7,6 +7,18 @@ import json
 import logging
 import time
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+
+def _rate_limit_key(request) -> str:
+    """Use tenant identity for rate limiting when available, fall back to IP."""
+    tenant_id = getattr(request.state, "tenant_id", None)
+    if tenant_id:
+        return f"tenant:{tenant_id}"
+    return get_remote_address(request)
+
 # Import configurations
 from config.database import Base, engine, get_db
 from config.settings import get_settings
@@ -33,6 +45,13 @@ try:
     INDEXER_AVAILABLE = True
 except ImportError:
     INDEXER_AVAILABLE = False
+
+# Prometheus metrics
+from prometheus_client import make_asgi_app, Counter, Histogram
+
+VECTOR_SEARCH_REQUESTS = Counter("vector_search_requests_total", "Total vector search requests")
+VECTOR_INGEST_REQUESTS = Counter("vector_ingest_requests_total", "Total vector ingest requests")
+QUERY_LATENCY = Histogram("vector_query_latency_seconds", "Query latency in seconds")
 
 # Initialize FastAPI app
 settings = get_settings()
@@ -71,6 +90,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Auth middleware
+from api.middleware.auth_middleware import auth_middleware
+app.middleware("http")(auth_middleware)
+
+# Prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 # Dependency
 def get_vector_service(db: Session = Depends(get_db)) -> VectorService:
@@ -127,6 +154,16 @@ def _http_error_from_result(result: Dict[str, Any], not_found_codes: bool = True
             return 404
         return 400
     return 200
+
+# ==================== Rate Limiting ====================
+
+if settings.RATE_LIMIT_ENABLED:
+    limiter = Limiter(
+        key_func=_rate_limit_key,
+        default_limits=[f"{settings.RATE_LIMIT_REQUESTS}/{settings.RATE_LIMIT_TIME}seconds"]
+    )
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ==================== Error Handlers ====================
 
@@ -600,9 +637,8 @@ async def delete_vector(
     
     return result
 
-# ==================== Search Operations ====================
+# ==================== Search Operations ====================@app.post("/search", response_model=Dict[str, Any], tags=["Search"])
 
-@app.post("/search", response_model=Dict[str, Any], tags=["Search"])
 async def search_vectors(
     search_data: SearchRequest,
     service: VectorService = Depends(get_vector_service)
@@ -612,10 +648,12 @@ async def search_vectors(
     
     - **query_vector**: Query vector
     - **k**: Number of results (1-100)
-    - **method**: Search method (hnsw, ivf, brute)
+    - **method**: Search method (hnsw, ivf, brute, pq, hybrid)
     - **ef_search**: HNSW search parameter
     - **n_probes**: IVF probes to search
     - **use_rerank**: IVF rerank for accuracy
+    - **cross_encoder_rerank**: Enable cross-encoder re-ranking (requires query_text)
+    - **rerank_top_k**: Candidates to send to cross-encoder (default: k*3)
     - **filters**: Optional metadata filters
     """
     result = service.search_vectors(
@@ -626,6 +664,9 @@ async def search_vectors(
         n_probes=search_data.n_probes,
         use_rerank=search_data.use_rerank,
         filters=search_data.filters,
+        cross_encoder_rerank=search_data.cross_encoder_rerank,
+        rerank_top_k=search_data.rerank_top_k,
+        query_text=search_data.query_text,
     )
     
     if not result["success"]:
@@ -673,6 +714,9 @@ async def batch_search(
             n_probes=query.n_probes,
             use_rerank=query.use_rerank,
             filters=query.filters,
+            cross_encoder_rerank=query.cross_encoder_rerank,
+            rerank_top_k=query.rerank_top_k,
+            query_text=query.query_text,
         )
         results.append({
             "query_index": i,
@@ -870,6 +914,53 @@ if INDEXER_AVAILABLE:
     logger.info("   See /docs for complete API documentation")
 else:
     logger.warning("⚠️ VectorIndexer API not available - using standard Vector API only")
+
+# ==================== RAG Routes ====================
+
+from api.routers.rag import router as rag_router
+app.include_router(rag_router, tags=["RAG"])
+logger.info("RAG API routes integrated")
+
+# ==================== Streaming RAG Routes ====================
+
+from api.routers.streaming_rag import router as streaming_rag_router
+app.include_router(streaming_rag_router)
+logger.info("Streaming RAG API routes integrated")
+
+# Auth API routes
+from api.routers.auth_api import router as auth_router
+app.include_router(auth_router, tags=["Auth"])
+logger.info("Auth API routes integrated")
+
+# Tenant API routes
+from api.routers.tenants import router as tenant_router
+app.include_router(tenant_router, tags=["Tenants"])
+logger.info("Tenant API routes integrated")
+
+# WebSocket search routes
+from api.routers.ws_search import router as ws_router
+app.include_router(ws_router, tags=["WebSocket"])
+logger.info("WebSocket search routes integrated")
+
+# ==================== Dashboard Routes ====================
+
+from api.routers.dashboard import router as dashboard_router
+from api.routers.dashboard import mount_static
+app.include_router(dashboard_router, tags=["Dashboard"])
+mount_static(app)
+logger.info("Dashboard routes integrated")
+
+# ==================== Enhanced Search Routes ====================
+
+from api.routers.search_enhanced import router as search_enhanced_router
+app.include_router(search_enhanced_router)
+logger.info("Enhanced search API routes integrated")
+
+# ==================== OpenAI-Compatible API Routes ====================
+
+from api.routers.openai_compat import router as openai_compat_router
+app.include_router(openai_compat_router, tags=["OpenAI-Compatible"])
+logger.info("OpenAI-compatible API routes integrated")
 
 if __name__ == "__main__":
     import uvicorn

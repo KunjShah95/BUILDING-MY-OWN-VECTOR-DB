@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator, model_validator
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
 
@@ -8,6 +8,9 @@ class SearchMethod(str, Enum):
     HNSW = "hnsw"
     IVF = "ivf"
     BRUTE = "brute"
+    KDTREE = "kdtree"
+    HYBRID = "hybrid"
+    PQ = "pq"
 
 class DistanceMetric(str, Enum):
     """Distance metric enumeration"""
@@ -67,11 +70,14 @@ class BatchInsert(BaseModel):
 class SearchRequest(BaseModel):
     """Model for search request"""
     query_vector: List[float] = Field(..., description="Query vector", example=[0.1, 0.2, 0.3])
+    query_text: Optional[str] = Field(None, description="Query text (required for hybrid search)")
     k: int = Field(5, description="Number of results", ge=1, le=100)
     method: SearchMethod = Field(SearchMethod.HNSW, description="Search method")
     ef_search: Optional[int] = Field(None, description="HNSW search parameter", ge=1)
     n_probes: Optional[int] = Field(None, description="IVF probes to search", ge=1)
     use_rerank: Optional[bool] = Field(True, description="IVF: rerank results for accuracy")
+    cross_encoder_rerank: bool = Field(False, description="Enable cross-encoder re-ranking after ANN search (requires query_text)")
+    rerank_top_k: Optional[int] = Field(None, description="Number of candidates to send to cross-encoder (defaults to k*3)", ge=1, le=500)
     filters: Optional[Dict[str, Any]] = Field(None, description="Optional metadata filters")
 
 class SearchResult(BaseModel):
@@ -250,6 +256,8 @@ class TextSearchRequest(BaseModel):
     ef_search: Optional[int] = Field(None, description="HNSW search parameter", ge=1)
     n_probes: Optional[int] = Field(None, description="IVF probes", ge=1)
     use_rerank: Optional[bool] = Field(True, description="IVF rerank flag")
+    cross_encoder_rerank: bool = Field(False, description="Enable cross-encoder re-ranking")
+    rerank_top_k: Optional[int] = Field(None, description="Cross-encoder candidates", ge=1, le=500)
     filters: Optional[Dict[str, Any]] = Field(None, description="Metadata filters")
 
 
@@ -260,6 +268,8 @@ class MediaSearchParams(BaseModel):
     ef_search: Optional[int] = Field(None, ge=1)
     n_probes: Optional[int] = Field(None, ge=1)
     use_rerank: Optional[bool] = True
+    cross_encoder_rerank: bool = False
+    rerank_top_k: Optional[int] = None
     filters: Optional[Dict[str, Any]] = None
 
 
@@ -269,3 +279,116 @@ class MediaIngestResponse(BaseModel):
     vector_id: Optional[str] = None
     message: Optional[str] = None
     vector: Optional[Dict[str, Any]] = None
+
+
+class RAGQueryRequest(BaseModel):
+    """RAG query request."""
+    query: str = Field(..., description="Natural language question")
+    collection_id: str = Field(..., description="Collection to search")
+    k: int = Field(5, description="Number of chunks to retrieve", ge=1, le=50)
+    model: str = Field("gpt-4o-mini", description="LLM model name")
+    max_tokens: int = Field(500, description="Max tokens in response", ge=50, le=4000)
+    temperature: float = Field(0.3, description="LLM temperature", ge=0.0, le=2.0)
+
+
+class RAGQueryResponse(BaseModel):
+    """RAG query response."""
+    success: bool
+    answer: str = ""
+    query: str = ""
+    context: List[Dict[str, Any]] = []
+    total_results: int = 0
+
+
+class PDFIngestResponse(BaseModel):
+    """PDF ingestion response."""
+    success: bool
+    message: str
+    total_chunks: int = 0
+    stored: int = 0
+
+
+# ==================== OpenAI-Compatible API Models ====================
+
+
+class OpenAIEmbeddingRequest(BaseModel):
+    """Mirrors OpenAI's /v1/embeddings request."""
+    model: str = Field("text-embedding-ada-002", description="Model name")
+    input: Union[str, List[str]] = Field(..., description="Text to embed")
+    encoding_format: str = Field("float", description="Response format")
+
+
+class OpenAIEmbeddingData(BaseModel):
+    """Single embedding result matching OpenAI's response shape."""
+    object: str = "embedding"
+    index: int
+    embedding: List[float]
+
+
+class OpenAIEmbeddingUsage(BaseModel):
+    """Token usage for embedding requests."""
+    prompt_tokens: int
+    total_tokens: int
+
+
+class OpenAIEmbeddingResponse(BaseModel):
+    """Mirrors OpenAI's /v1/embeddings response."""
+    object: str = "list"
+    data: List[OpenAIEmbeddingData]
+    model: str
+    usage: OpenAIEmbeddingUsage
+
+
+class OpenAIChatMessage(BaseModel):
+    """Chat message matching OpenAI's format."""
+    role: str = Field(..., description="system, user, or assistant")
+    content: str = Field(..., description="Message content")
+
+
+class OpenAIChatRequest(BaseModel):
+    """Mirrors OpenAI's /v1/chat/completions request."""
+    model: str = Field("gpt-4o-mini", description="Model name")
+    messages: List[OpenAIChatMessage] = Field(..., description="Chat messages")
+    max_tokens: int = Field(500, ge=1, le=4096)
+    temperature: float = Field(0.3, ge=0.0, le=2.0)
+    stream: bool = Field(False, description="Streaming not yet supported")
+    collection_id: Optional[str] = Field(None, description="Vector DB collection to use as RAG source")
+    k: int = Field(5, ge=1, le=50, description="Number of chunks to retrieve for RAG")
+
+
+class OpenAIChatChoice(BaseModel):
+    """Chat completion choice matching OpenAI's format."""
+    index: int = 0
+    message: OpenAIChatMessage
+    finish_reason: str = "stop"
+
+
+class OpenAIChatUsage(BaseModel):
+    """Token usage for chat completions."""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+class OpenAIChatResponse(BaseModel):
+    """Mirrors OpenAI's /v1/chat/completions response."""
+    id: str = ""
+    object: str = "chat.completion"
+    created: int = 0
+    model: str
+    choices: List[OpenAIChatChoice]
+    usage: OpenAIChatUsage = OpenAIChatUsage()
+
+
+class OpenAIModel(BaseModel):
+    """Model info matching OpenAI's /v1/models response."""
+    id: str
+    object: str = "model"
+    created: int = 0
+    owned_by: str = "vector-db"
+
+
+class OpenAIModelListResponse(BaseModel):
+    """List of available models."""
+    object: str = "list"
+    data: List[OpenAIModel]

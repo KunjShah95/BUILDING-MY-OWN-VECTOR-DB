@@ -1,0 +1,69 @@
+replicaCount: 1
+
+image:
+  repository: vector-db-api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: ""
+  host: vector-db.local
+
+postgresql:
+  enabled: true
+  auth:
+    username: vector_user
+    password: vector_password
+    database: vector_db
+  primary:
+    persistence:
+      size: 10Gi
+
+redis:
+  enabled: false
+
+env:
+  APP_NAME: "Vector Database API"
+  DEBUG: "false"
+  STORAGE_PROVIDER: local
+  DEFAULT_EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
+  EMBEDDING_DEVICE: cpu
+
+persistence:
+  enabled: true
+  size: 5Gi
+  media:
+    enabled: true
+    size: 10Gi
+  indexes:
+    enabled: true
+    size: 1Gi
+
+resources:
+  limits:
+    cpu: 2
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+monitoring:
+  enabled: false
+  serviceMonitor:
+    enabled: false

@@ -1,0 +1,29 @@
+{{- if .Values.persistence.media.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "vector-db.fullname" . }}-media
+  labels:
+    {{- include "vector-db.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.media.size }}
+{{- end }}
+---
+{{- if .Values.persistence.indexes.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "vector-db.fullname" . }}-indexes
+  labels:
+    {{- include "vector-db.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.indexes.size }}
+{{- end }}

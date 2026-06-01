@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package vectordb;
+
+option go_package = "github.com/vectordb/grpc/pb";
+option java_package = "com.vectordb.grpc";
+
+service VectorDB {
+    rpc Search(SearchRequest) returns (SearchResponse);
+    rpc Insert(InsertRequest) returns (InsertResponse);
+    rpc BatchInsert(BatchInsertRequest) returns (BatchInsertResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    rpc GetVector(GetVectorRequest) returns (GetVectorResponse);
+    rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
+    rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message SearchRequest {
+    string collection_id = 1;
+    repeated float query_vector = 2;
+    int32 k = 3;
+    string method = 4;
+    int32 ef_search = 5;
+    int32 n_probes = 6;
+    bool use_rerank = 7;
+    map<string, string> filters = 8;
+    string distance_metric = 9;
+}
+
+message SearchResponse {
+    bool success = 1;
+    repeated SearchResult results = 2;
+    int32 total_results = 3;
+    double search_time_ms = 4;
+    string method = 5;
+    string message = 6;
+}
+
+message SearchResult {
+    string id = 1;
+    double score = 2;
+    string metadata = 3;
+}
+
+message InsertRequest {
+    string collection_id = 1;
+    repeated float vector = 2;
+    string vector_id = 3;
+    string metadata = 4;
+}
+
+message InsertResponse {
+    bool success = 1;
+    string vector_id = 2;
+    string message = 3;
+}
+
+message BatchInsertRequest {
+    string collection_id = 1;
+    repeated VectorEntry vectors = 2;
+    string batch_name = 3;
+}
+
+message VectorEntry {
+    repeated float vector = 1;
+    string vector_id = 2;
+    string metadata = 3;
+}
+
+message BatchInsertResponse {
+    bool success = 1;
+    int32 vector_count = 2;
+    string message = 3;
+}
+
+message DeleteRequest {
+    string vector_id = 1;
+    string collection_id = 2;
+}
+
+message DeleteResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message GetVectorRequest {
+    string vector_id = 1;
+}
+
+message GetVectorResponse {
+    bool success = 1;
+    string vector_id = 2;
+    repeated float vector = 3;
+    string metadata = 4;
+    string message = 5;
+}
+
+message ListCollectionsRequest {
+    int32 limit = 1;
+    int32 offset = 2;
+}
+
+message ListCollectionsResponse {
+    bool success = 1;
+    repeated CollectionInfo collections = 2;
+}
+
+message CollectionInfo {
+    string collection_id = 1;
+    string name = 2;
+    string modality = 3;
+    int32 dimension = 4;
+    string embedding_model = 5;
+    string distance_metric = 6;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+    string status = 1;
+    bool database_connected = 2;
+    bool index_available = 3;
+    int64 total_vectors = 4;
+}

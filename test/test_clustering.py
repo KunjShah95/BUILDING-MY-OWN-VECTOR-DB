@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
-from utils.clustering import KMeans, VectorIndexer
+from utils.clustering import KMeans
+from services.vector_indexer import KMeansIndexer
 def test_kmeans_basic():
     "Test basic K-Means Functionality"
 
@@ -28,7 +29,7 @@ def test_vector_indexer():
         [2, 2]
     ])
 
-    kmeans= Kmeans(k=2)
+    kmeans= KMeans(k=2)
     kmeans.fit(data)
 
     #test prediction
@@ -38,47 +39,33 @@ def test_vector_indexer():
     assert len(prediction)==1
     assert 0<=prediction[0]<2
 
-def test_vector_indexer():
-    """Test Vector Indexer functionality"""
-    # Create sample vectors
+def test_kmeans_indexer():
+    """Test KMeansIndexer functionality"""
     vectors = [
         [1, 1, 1],
         [2, 2, 2],
         [10, 10, 10],
         [11, 11, 11]
     ]
-    
     vector_ids = ["vec1", "vec2", "vec3", "vec4"]
-    
-    # Test Vector Indexer
-    indexer = VectorIndexer(k=2)
+    indexer = KMeansIndexer(k=2)
     indexer.fit(vectors, vector_ids)
-    
     assert indexer.centroids is not None
     assert len(indexer.get_cluster_info()["cluster_sizes"]) == 2
-    
-    # Test search
-    query_vector = [1.5, 1.5, 1.5]
-    results = indexer.search(query_vector, k=2)
-    
+    results = indexer.search(np.array([1.5, 1.5, 1.5]), k=2)
     assert len(results) >= 0
 
 def test_cluster_assignment():
     """Test cluster assignment"""
-    # Create simple test data
     vectors = [
         [0, 0],
         [1, 1],
         [10, 10],
         [11, 11]
     ]
-    
     vector_ids = ["a", "b", "c", "d"]
-    
-    indexer = VectorIndexer(k=2)
+    indexer = KMeansIndexer(k=2)
     indexer.fit(vectors, vector_ids)
-    
-    # Check that we have clusters
     clusters = indexer.get_all_clusters()
     assert len(clusters) == 2
     assert len(clusters[0]) >= 0 or len(clusters[1]) >= 0

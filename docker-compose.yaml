@@ -68,6 +68,28 @@ services:
     depends_on:
       - prometheus
 
+  # Traefik reverse proxy (uncomment for HTTPS in production):
+  # traefik:
+  #   image: traefik:v2.10
+  #   container_name: vector_db_traefik
+  #   command:
+  #     - "--api.insecure=false"
+  #     - "--providers.docker=true"
+  #     - "--entrypoints.websecure.address=:443"
+  #     - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+  #     - "--certificatesresolvers.letsencrypt.acme.email=admin@example.com"
+  #     - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+  #   ports:
+  #     - "443:443"
+  #   volumes:
+  #     - "./letsencrypt:/letsencrypt"
+  #     - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  #   labels:
+  #     - "traefik.http.routers.vector-api.rule=Host(`api.example.com`)"
+  #     - "traefik.http.routers.vector-api.entrypoints=websecure"
+  #     - "traefik.http.routers.vector-api.tls.certresolver=letsencrypt"
+  #     - "traefik.http.services.vector-api.loadbalancer.server.port=8000"
+
 volumes:
   postgres_data:
   prometheus_data:

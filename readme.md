@@ -420,7 +420,7 @@ graph TB
 │   ├── test_hnsw.py             # HNSW algorithm tests
 │   ├── test_ivf.py              # IVF algorithm tests
 │   ├── test_clustering.py       # Clustering utility tests
-│   └── test_comprnehesive.py    # End-to-end integration tests
+│   └── test_comprehensive.py    # End-to-end integration tests
 ├── examples/                    # Usage examples
 │   ├── indexer_examples.py      # Index creation examples
 │   └── vector_indexer_api.py    # API usage examples
@@ -840,6 +840,172 @@ client.close()
 ```
 
 See `sdk/README.md` for the full client API.
+
+### Authentication & API Key Management
+
+The API uses key-based authentication. Manage keys via the auth endpoints.
+
+**Create an API Key** — `POST /api/keys/create`
+
+```python
+response = requests.post(
+    "http://localhost:8000/api/keys/create",
+    params={"collection_id": "docs", "name": "my-key", "permissions": "read_write"},
+)
+print(response.json())
+```
+
+**Revoke an API Key** — `DELETE /api/keys/revoke`
+
+```python
+requests.delete("http://localhost:8000/api/keys/revoke", params={"api_key": "sk-..."})
+```
+
+**List Keys for a Collection** — `GET /api/keys/list/{collection_id}`
+
+```python
+requests.get("http://localhost:8000/api/keys/list/docs")
+```
+
+Keys are stored as SHA-256 hashes. Always use HTTPS in production.
+
+### Dashboard Endpoints
+
+Real-time cluster overview at `/dashboard`.
+
+**Stats** — `GET /api/dashboard/stats`
+
+```python
+stats = requests.get("http://localhost:8000/api/dashboard/stats").json()
+print(stats["stats"]["total_vectors"], "vectors across", stats["stats"]["total_collections"], "collections")
+```
+
+**Latency** — `GET /api/dashboard/latency`
+
+```python
+latency = requests.get("http://localhost:8000/api/dashboard/latency").json()
+print(f"Avg query latency: {latency['latency']['avg_ms']}ms")
+```
+
+**Index Info** — `GET /api/dashboard/index-info`
+
+```python
+info = requests.get("http://localhost:8000/api/dashboard/index-info").json()
+print("HNSW loaded:", info["index_info"]["hnsw_loaded"])
+```
+
+### Streaming RAG & LLM
+
+The streaming endpoint uses Server-Sent Events to stream RAG responses token-by-token.
+
+**Stream RAG Query** — `GET /collections/{collection_id}/query/stream?query=...&k=5`
+
+```python
+import httpx
+with httpx.Client() as client:
+    with client.stream("GET", "http://localhost:8000/collections/docs/query/stream",
+                       params={"query": "What is the return policy?", "k": 3}) as resp:
+        for chunk in resp.iter_text():
+            print(chunk, end="")
+```
+
+**Generic LLM Stream** — `POST /llm/stream`
+
+```python
+response = requests.post(
+    "http://localhost:8000/llm/stream",
+    json={"messages": [{"role": "user", "content": "Hello"}], "model": "gpt-4o-mini"},
+    stream=True,
+)
+for line in response.iter_lines():
+    print(line)
+```
+
+### Hybrid Search & Reranking
+
+Combine dense vector search with sparse BM25 via Reciprocal Rank Fusion.
+
+**Hybrid Search** — `POST /collections/{collection_id}/search/hybrid`
+
+```python
+hybrid = requests.post(
+    f"http://localhost:8000/collections/docs/search/hybrid",
+    json={"query": "return policy", "k": 10, "alpha": 0.5},
+).json()
+```
+
+**Search + Cross-Encoder Rerank** — `POST /collections/{collection_id}/search/rerank`
+
+```python
+reranked = requests.post(
+    f"http://localhost:8000/collections/docs/search/rerank",
+    json={"query": "return policy", "k": 5},
+).json()
+for hit in reranked["results"]:
+    print(hit["vector_id"], hit["distance"])
+```
+
+**Build Sparse Index** — `POST /collections/{collection_id}/index/sparse`
+
+```python
+requests.post(f"http://localhost:8000/collections/docs/index/sparse")
+```
+
+### PQ Index Usage
+
+Product Quantization compresses vectors for memory-efficient search.
+
+**Build a PQ index** — `POST /index` with `"method": "pq"`
+
+```python
+pq = requests.post("http://localhost:8000/index", json={"method": "pq"}).json()
+print(pq["stats"]["compression_ratio"], ":1 compression")
+```
+
+**Search with PQ** — `POST /search` with `"method": "pq"`
+
+```python
+results = requests.post("http://localhost:8000/search", json={
+    "query_vector": [0.1, 0.2, 0.3, 0.4],
+    "k": 10,
+    "method": "pq",
+}).json()
+```
+
+**Save / Load PQ** — `POST /index/save?method=pq` and `POST /index/load?method=pq`
+
+### gRPC API
+
+An optional gRPC server is available alongside the REST API.
+
+**Start the server:**
+```powershell
+python -m api.grpc.server
+```
+Listens on `0.0.0.0:50051` by default.
+
+**Available RPCs:**
+| RPC | Description |
+|-----|-------------|
+| `Search` | Vector similarity search |
+| `Insert` | Insert a single vector |
+| `BatchInsert` | Batch vector insertion |
+| `Delete` | Delete a vector |
+| `GetVector` | Get vector by ID |
+| `ListCollections` | List all collections |
+| `Health` | Health check |
+
+Install the gRPC dependency:
+```powershell
+pip install grpcio
+```
+
+Generate Python stubs from `api/grpc/vector_service.proto`:
+```powershell
+python -m grpc_tools.protoc -Iapi/grpc --python_out=api/grpc --grpc_python_out=api/grpc api/grpc/vector_service.proto
+```
+
+> **Note:** The gRPC server delegates to the same `VectorService` used by the REST API.
 
 ### Roadmap / What more can be worked upon
 

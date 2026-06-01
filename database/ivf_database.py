@@ -12,12 +12,22 @@ import json
 
 
 class IVFVectorDatabase:
+    _GLOBAL_KEY = "__global__"
+
     def __init__(self, db_session: Session):
         self.db_session = db_session
         self.vector_model = VectorModel(db_session)
         self.ivf_index = None
         self.index_path = get_ivf_path()
         self._collection_id: Optional[str] = None
+        self._scoped_ivf: Dict[str, IVFIndex] = {}
+
+    def _scope_key(self, collection_id: Optional[str] = None) -> str:
+        return collection_id if collection_id else self._GLOBAL_KEY
+
+    def get_ivf_index(self, collection_id: Optional[str] = None) -> Optional[IVFIndex]:
+        """Return in-memory IVF index for global or collection scope."""
+        return self._scoped_ivf.get(self._scope_key(collection_id))
 
     def clear_database(self) -> Dict[str, Any]:
         """
@@ -25,8 +35,8 @@ class IVFVectorDatabase:
         """
         try:
             result = self.vector_model.clear_all_vectors()
-            # Reset index
             self.ivf_index = None
+            self._scoped_ivf.clear()
             return result
         except Exception as e:
             return {"success": False, "message": f"Error clearing database: {str(e)}"}
@@ -94,11 +104,14 @@ class IVFVectorDatabase:
             Index creation result
         """
         try:
-            # Check if index already exists
-            if self.ivf_index is not None and not force_rebuild:
+            key = self._scope_key(collection_id)
+            existing = self._scoped_ivf.get(key)
+
+            if existing is not None and not force_rebuild:
+                scope = f"collection '{collection_id}'" if collection_id else "global"
                 return {
                     "success": False,
-                    "message": "IVF Index already exists. Use force_rebuild=True to rebuild.",
+                    "message": f"IVF Index already exists for {scope}. Use force_rebuild=True to rebuild.",
                 }
 
             if collection_id:
@@ -118,23 +131,27 @@ class IVFVectorDatabase:
             vector_ids = [vector.vector_id for vector in vectors_data]
 
             # Create IVF index
-            self.ivf_index = IVFIndex(n_clusters=n_clusters, n_probes=n_probes)
+            ivf_index = IVFIndex(n_clusters=n_clusters, n_probes=n_probes)
 
             # Train on all vectors
-            self.ivf_index.train(vectors)
+            ivf_index.train(vectors)
 
             # Add all vectors to index
             for vector, vector_id in zip(vectors, vector_ids):
                 original_vector = self.vector_model.get_vector(vector_id)
                 metadata = original_vector.meta_data if original_vector else None
-                self.ivf_index.add(vector, vector_id, metadata)
+                ivf_index.add(vector, vector_id, metadata)
+
+            self._scoped_ivf[key] = ivf_index
+            if not collection_id:
+                self.ivf_index = ivf_index
 
             self._collection_id = collection_id
             self.index_path = get_ivf_path(collection_id)
             ensure_index_dir(collection_id)
-            self.ivf_index.save(self.index_path)
+            ivf_index.save(self.index_path)
 
-            stats = self.ivf_index.get_stats()
+            stats = ivf_index.get_stats()
 
             scope_msg = f" for collection '{collection_id}'" if collection_id else ""
             return {
@@ -162,12 +179,17 @@ class IVFVectorDatabase:
                     "message": f"Index file not found: {path}",
                 }
 
-            self.ivf_index = IVFIndex()
-            self.ivf_index.load(path)
+            ivf_index = IVFIndex()
+            ivf_index.load(path)
+
+            key = self._scope_key(collection_id)
+            self._scoped_ivf[key] = ivf_index
+            if not collection_id:
+                self.ivf_index = ivf_index
             self._collection_id = collection_id
             self.index_path = path
 
-            stats = self.ivf_index.get_stats()
+            stats = ivf_index.get_stats()
 
             return {
                 "success": True,
@@ -187,12 +209,14 @@ class IVFVectorDatabase:
             Save result
         """
         try:
-            if self.ivf_index is None:
+            key = self._scope_key(collection_id)
+            ivf_index = self._scoped_ivf.get(key)
+            if ivf_index is None:
                 return {"success": False, "message": "No IVF index to save"}
 
             path = get_ivf_path(collection_id)
             ensure_index_dir(collection_id)
-            self.ivf_index.save(path)
+            ivf_index.save(path)
 
             return {
                 "success": True,
@@ -210,6 +234,7 @@ class IVFVectorDatabase:
         use_ivf: bool = True,
         use_rerank: bool = True,
         n_probes: int = 10,
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Search for similar vectors
@@ -225,15 +250,18 @@ class IVFVectorDatabase:
             Search results
         """
         try:
-            if use_ivf and self.ivf_index is not None:
+            key = self._scope_key(collection_id)
+            ivf_index = self._scoped_ivf.get(key) if use_ivf else None
+
+            if ivf_index is not None:
                 # Use IVF search
-                if n_probes != self.ivf_index.n_probes:
-                    self.ivf_index.n_probes = n_probes
+                if n_probes != ivf_index.n_probes:
+                    ivf_index.n_probes = n_probes
 
                 if use_rerank:
-                    results = self.ivf_index.search_with_rerank(query_vector, k)
+                    results = ivf_index.search_with_rerank(query_vector, k)
                 else:
-                    results = self.ivf_index.search(query_vector, k)
+                    results = ivf_index.search(query_vector, k)
 
                 method = "ivf_with_rerank" if use_rerank else "ivf"
             else:
@@ -252,7 +280,8 @@ class IVFVectorDatabase:
             return {"success": False, "message": f"Error during search: {str(e)}"}
 
     def compare_search_methods(
-        self, query_vector: List[float], k: int = 5
+        self, query_vector: List[float], k: int = 5,
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Compare different search methods
@@ -268,10 +297,13 @@ class IVFVectorDatabase:
 
         results = {"query_vector": query_vector, "methods": {}}
 
+        key = self._scope_key(collection_id)
+        ivf_index = self._scoped_ivf.get(key)
+
         # IVF Search
-        if self.ivf_index is not None:
+        if ivf_index is not None:
             start_time = time.time()
-            ivf_results = self.ivf_index.search(query_vector, k)
+            ivf_results = ivf_index.search(query_vector, k)
             ivf_time = time.time() - start_time
 
             results["methods"]["ivf"] = {
@@ -348,9 +380,9 @@ class IVFVectorDatabase:
         """
         try:
             success = self.vector_model.delete_vector(vector_id)
-            if success and self.ivf_index is not None:
-                self.ivf_index.delete_vector(vector_id)
-                self.save_ivf_index()
+            if success:
+                for idx in self._scoped_ivf.values():
+                    idx.delete_vector(vector_id)
 
             if success:
                 return {
@@ -374,25 +406,39 @@ class IVFVectorDatabase:
                 ivf_stats = self.ivf_index.get_stats()
                 stats["ivf_index"] = ivf_stats
 
+            scoped_count = len(self._scoped_ivf) - (1 if self._GLOBAL_KEY in self._scoped_ivf else 0)
+            if scoped_count > 0:
+                stats["per_collection_ivf_count"] = scoped_count
+
             return {"success": True, "stats": stats}
         except Exception as e:
             return {"success": False, "message": f"Error getting stats: {str(e)}"}
 
-    def get_index_stats(self) -> Dict[str, Any]:
+    def get_index_stats(self, collection_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Get IVF index statistics
+
+        Args:
+            collection_id: Optional collection scope
+
+        Returns:
+            Index stats
         """
         try:
-            if self.ivf_index is None:
-                return {"success": False, "message": "No IVF index created yet"}
+            key = self._scope_key(collection_id)
+            ivf_index = self._scoped_ivf.get(key)
+            if ivf_index is None:
+                scope = f" for collection '{collection_id}'" if collection_id else ""
+                return {"success": False, "message": f"No IVF index{scope}"}
 
-            stats = self.ivf_index.get_stats()
-            return {"success": True, "stats": stats}
+            stats = ivf_index.get_stats()
+            return {"success": True, "stats": stats, "collection_id": collection_id}
         except Exception as e:
             return {"success": False, "message": f"Error getting index stats: {str(e)}"}
 
     def rebuild_ivf_index(
-        self, n_clusters: int = 100, n_probes: int = 10
+        self, n_clusters: int = 100, n_probes: int = 10,
+        collection_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Rebuild the IVF index
@@ -405,12 +451,14 @@ class IVFVectorDatabase:
             Rebuild result
         """
         try:
-            # Clear existing index
-            self.ivf_index = None
+            key = self._scope_key(collection_id)
+            self._scoped_ivf.pop(key, None)
+            if not collection_id:
+                self.ivf_index = None
 
-            # Create new index
             return self.create_ivf_index(
-                n_clusters=n_clusters, n_probes=n_probes, force_rebuild=True
+                n_clusters=n_clusters, n_probes=n_probes, force_rebuild=True,
+                collection_id=collection_id,
             )
         except Exception as e:
             return {
