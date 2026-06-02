@@ -380,7 +380,7 @@ async def build_collection_index(
     service: CollectionIndexService = Depends(get_collection_index_service),
 ):
     """
-    Build and persist an HNSW index for vectors in this collection only.
+    Build and persist an HNSW or IVF index for vectors in this collection only.
     """
     tenant_id = getattr(request.state, "tenant_id", None)
     result = service.build_collection_index(
@@ -398,13 +398,71 @@ async def build_collection_index(
     return result
 
 
+@app.post("/collections/{collection_id}/index/save", tags=["Index"])
+async def save_collection_index(
+    request: Request,
+    collection_id: str,
+    method: SearchMethod = Query(SearchMethod.HNSW, description="Index method"),
+    service: CollectionIndexService = Depends(get_collection_index_service),
+):
+    """Save the per-collection index to disk."""
+    if method.value == "hnsw":
+        result = service.vector_service.save_index("hnsw", collection_id=collection_id)
+    elif method.value == "ivf":
+        result = service.vector_service.save_index("ivf", collection_id=collection_id)
+    else:
+        result = {"success": False, "message": f"Unknown method: {method}"}
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@app.post("/collections/{collection_id}/index/load", tags=["Index"])
+async def load_collection_index(
+    request: Request,
+    collection_id: str,
+    method: SearchMethod = Query(SearchMethod.HNSW, description="Index method"),
+    service: CollectionIndexService = Depends(get_collection_index_service),
+):
+    """Load the per-collection index from disk."""
+    if method.value == "hnsw":
+        result = service.vector_service.load_index("hnsw", collection_id=collection_id)
+    elif method.value == "ivf":
+        result = service.vector_service.load_index("ivf", collection_id=collection_id)
+    else:
+        result = {"success": False, "message": f"Unknown method: {method}"}
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@app.post("/collections/{collection_id}/index/ivf/rebuild", tags=["Index"])
+async def rebuild_collection_ivf(
+    request: Request,
+    collection_id: str,
+    n_clusters: int = Query(100, ge=1, le=10000),
+    n_probes: int = Query(10, ge=1),
+    service: CollectionIndexService = Depends(get_collection_index_service),
+):
+    """Rebuild the per-collection IVF index with new parameters."""
+    tenant_id = getattr(request.state, "tenant_id", None)
+    result = service.rebuild_ivf(
+        collection_id=collection_id,
+        n_clusters=n_clusters,
+        n_probes=n_probes,
+    )
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
 @app.get("/collections/{collection_id}/index/stats", tags=["Index"])
 async def collection_index_stats(
     request: Request,
     collection_id: str,
     service: CollectionIndexService = Depends(get_collection_index_service),
 ):
-    """Per-collection HNSW index status (on disk, loaded, graph stats)."""
+    """Per-collection index status (on disk, loaded, graph stats)."""
     tenant_id = getattr(request.state, "tenant_id", None)
     result = service.get_collection_index_stats(collection_id, tenant_id=tenant_id)
     if not result["success"]:
@@ -521,9 +579,15 @@ async def ingest_audio(
     file: UploadFile = File(...),
     metadata: Optional[str] = Form(None),
     vector_id: Optional[str] = Form(None),
+    chunk_seconds: Optional[float] = Form(None, description="Chunk long audio into segments of N seconds"),
     service: MultimodalService = Depends(get_multimodal_service),
 ):
-    """Upload audio; embed with librosa MFCC features and store in the collection."""
+    """Upload audio; embed with librosa MFCC features and store in the collection.
+
+    When ``chunk_seconds`` is provided, long audio files are split into
+    fixed-length segments and each segment is embedded and stored as a
+    separate vector (segment-level search).
+    """
     tenant_id = getattr(request.state, "tenant_id", None)
     raw = await _read_upload(file)
     result = service.ingest_audio(
@@ -532,6 +596,7 @@ async def ingest_audio(
         filename=file.filename or "upload.wav",
         metadata=_parse_metadata_form(metadata),
         vector_id=vector_id,
+        chunk_seconds=chunk_seconds,
         tenant_id=tenant_id,
     )
     if not result["success"]:
@@ -1082,6 +1147,29 @@ logger.info("Dashboard routes integrated")
 from api.routers.search_enhanced import router as search_enhanced_router
 app.include_router(search_enhanced_router)
 logger.info("Enhanced search API routes integrated")
+
+# ==================== Ingestion Queue Routes ====================
+
+from api.routers.ingestion import router as ingestion_router
+app.include_router(ingestion_router)
+logger.info("Ingestion queue API routes integrated")
+
+# ==================== Time-Series API Routes ====================
+
+from api.routers.timeseries import router as timeseries_router
+app.include_router(timeseries_router)
+logger.info("Time-series API routes integrated")
+
+# ==================== GraphQL API ====================
+
+try:
+    from strawberry.asgi import GraphQL as GraphQLApp
+    from api.graphql.schema import schema as gql_schema
+    graphql_app = GraphQLApp(gql_schema)
+    app.mount("/graphql", graphql_app)
+    logger.info("GraphQL API mounted at /graphql")
+except Exception as exc:
+    logger.warning("GraphQL API unavailable: %s", exc)
 
 # ==================== OpenAI-Compatible API Routes ====================
 

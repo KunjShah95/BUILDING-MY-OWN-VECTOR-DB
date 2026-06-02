@@ -265,7 +265,8 @@ class VectorModel:
                       distance_metric: str = 'cosine', 
                       filters: Dict[str, Any] = None,
                       collection_id: str = None,
-                      tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
+                      tenant_id: Optional[str] = None,
+                      use_sql_filter: bool = False) -> List[Dict[str, Any]]:
         """
         Search for similar vectors using brute force with optional filters.
         Accepts tenant_id to scope search to tenant-owned collections.
@@ -274,6 +275,33 @@ class VectorModel:
         batch_size = 1000
         offset = 0
         all_results = []
+
+        # Apply SQL pre-filtering if requested and filters are simple (eq only)
+        if use_sql_filter and filters:
+            from services.metadata_filter import MetadataFilter
+            query = self.db.query(Vector)
+            if collection_id:
+                query = query.filter(Vector.collection_id == collection_id)
+            if tenant_id:
+                ids_to_filter = self._tenant_collection_ids(tenant_id)
+                if ids_to_filter:
+                    query = query.filter(Vector.collection_id.in_(ids_to_filter))
+            query, _ = MetadataFilter.pre_filter(self.db, Vector, filters, base_query=query)
+
+            all_vectors = query.all()
+            for vector in all_vectors:
+                distance = self._calculate_distance(query_vector, vector.vector_data, distance_metric)
+                all_results.append({
+                    "distance": distance,
+                    "vector_id": vector.vector_id,
+                    "metadata": vector.meta_data,
+                    "meta_data": vector.meta_data,
+                    "collection_id": vector.collection_id,
+                    "vector": vector.vector_data,
+                    "created_at": vector.created_at
+                })
+            all_results.sort(key=lambda x: x["distance"])
+            return all_results[:k]
 
         # Scope to tenant collections if tenant_id provided
         ids_to_filter = None

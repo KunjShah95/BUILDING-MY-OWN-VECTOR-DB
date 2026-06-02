@@ -136,15 +136,28 @@ def embed_image(path_or_bytes: PathOrBytes, model_name: Optional[str] = None) ->
     return vector.tolist()
 
 
-def embed_audio(path_or_bytes: PathOrBytes, model_name: Optional[str] = None) -> List[float]:
+def embed_audio(
+    path_or_bytes: PathOrBytes,
+    model_name: Optional[str] = None,
+    *,
+    chunk_seconds: Optional[float] = None,
+) -> Union[List[float], List[List[float]]]:
     """
     Embed audio using librosa MFCC statistics (128-dim by default).
 
-    Loads mono audio at AUDIO_SAMPLE_RATE, caps length at AUDIO_MAX_DURATION_SEC,
-    computes n_mfcc=128 MFCCs, mean-pools over time, L2-normalizes.
+    Loads mono audio at AUDIO_SAMPLE_RATE, computes n_mfcc=128 MFCCs,
+    mean-pools over time, L2-normalizes.
+
+    When ``chunk_seconds`` is provided, splits the audio into fixed-length
+    chunks and returns a list of segment-level vectors (one per chunk),
+    enabling long-audio support beyond the AUDIO_MAX_DURATION_SEC cap.
+
+    When ``chunk_seconds`` is None (default), caps duration at
+    AUDIO_MAX_DURATION_SEC and returns a single vector.
+
     The model_name argument is accepted for collection metadata parity only.
     """
-    del model_name  # librosa path is fixed; collection stores DEFAULT_AUDIO_MODEL id
+    del model_name
     settings = get_settings()
     try:
         import librosa
@@ -152,26 +165,48 @@ def embed_audio(path_or_bytes: PathOrBytes, model_name: Optional[str] = None) ->
         raise RuntimeError(_AUDIO_IMPORT_ERROR) from exc
 
     if isinstance(path_or_bytes, (str, Path)):
-        y, _sr = librosa.load(
+        y, sr = librosa.load(
             str(path_or_bytes),
             sr=settings.AUDIO_SAMPLE_RATE,
             mono=True,
-            duration=settings.AUDIO_MAX_DURATION_SEC,
         )
     else:
         data = _read_bytes(path_or_bytes)
-        y, _sr = librosa.load(
+        y, sr = librosa.load(
             io.BytesIO(data),
             sr=settings.AUDIO_SAMPLE_RATE,
             mono=True,
-            duration=settings.AUDIO_MAX_DURATION_SEC,
         )
 
     if y.size == 0:
         raise ValueError("Audio could not be decoded or is empty")
 
     n_mfcc = settings.DEFAULT_AUDIO_DIMENSION
-    mfcc = librosa.feature.mfcc(y=y, sr=settings.AUDIO_SAMPLE_RATE, n_mfcc=n_mfcc)
+
+    # Chunked mode: split audio into segments and return per-segment vectors
+    if chunk_seconds is not None and chunk_seconds > 0:
+        chunk_samples = int(chunk_seconds * sr)
+        segments: List[List[float]] = []
+        for start in range(0, len(y), chunk_samples):
+            segment = y[start:start + chunk_samples]
+            if len(segment) < sr * 0.5:  # skip trailing segments < 0.5s
+                continue
+            mfcc = librosa.feature.mfcc(
+                y=segment, sr=sr, n_mfcc=n_mfcc
+            )
+            vec = mfcc.mean(axis=1)
+            vec = _l2_normalize(vec.astype(np.float64))
+            segments.append(vec.tolist())
+        if not segments:
+            raise ValueError("Audio too short for chunking")
+        return segments
+
+    # Single-vector mode (original behavior with max duration cap)
+    duration = min(len(y) / sr, settings.AUDIO_MAX_DURATION_SEC)
+    samples_to_use = int(duration * sr)
+    y = y[:samples_to_use]
+
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
     vec = mfcc.mean(axis=1)
     vec = _l2_normalize(vec.astype(np.float64))
     return vec.tolist()
@@ -207,10 +242,39 @@ def is_clip_model(model_name: Optional[str] = None) -> bool:
     return "clip" in name or name.startswith("openai/")
 
 
-def embed_clip_text(text: str, model_name: Optional[str] = None) -> List[float]:
-    """Embed text in the same CLIP space as embed_image (text-to-image search)."""
+def embed_clip_text(
+    text: str,
+    model_name: Optional[str] = None,
+    *,
+    temperature: float = 1.0,
+    normalize: bool = True,
+) -> List[float]:
+    """Embed text in the same CLIP space as embed_image (text-to-image search).
+
+    Parameters
+    ----------
+    text : str
+        Input text to embed.
+    model_name : str, optional
+        CLIP model name (defaults to settings.DEFAULT_IMAGE_MODEL).
+    temperature : float
+        Scaling factor applied before L2 normalization. Lower values (< 1.0)
+        sharpen the similarity distribution for more discriminative retrieval.
+        Default 1.0.
+    normalize : bool
+        Whether to L2-normalize the output vector. Should be True for cosine
+        similarity search. Default True.
+    """
     if not text or not text.strip():
         raise ValueError("Text cannot be empty")
     model = _load_image_model(model_name)
     vector = model.encode(text.strip(), convert_to_numpy=True)
+    
+    # Temperature scaling: sharpen or smooth the embedding distribution
+    if temperature != 1.0:
+        vector = vector * (1.0 / temperature)
+    
+    if normalize:
+        vector = _l2_normalize(vector)
+    
     return vector.tolist()

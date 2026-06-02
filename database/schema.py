@@ -137,6 +137,9 @@ class Vector(Base):
         nullable=True,
         index=True,
     )
+    # Time-series support columns
+    timestamp = Column(DateTime(timezone=True), nullable=True, index=True)
+    series_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -145,6 +148,7 @@ class Vector(Base):
         Index('idx_vectors_vector_id', 'vector_id'),
         Index('idx_vectors_created_at', 'created_at'),
         Index('idx_vectors_collection_id', 'collection_id'),
+        Index('idx_vectors_series', 'collection_id', 'series_id', 'timestamp'),
     )
     
     def __repr__(self):

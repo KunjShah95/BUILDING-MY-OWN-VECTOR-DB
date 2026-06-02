@@ -212,6 +212,15 @@ class IVFVectorDatabase:
             key = self._scope_key(collection_id)
             ivf_index = self._scoped_ivf.get(key)
             if ivf_index is None:
+                # Index might already be on disk (e.g. saved during create_ivf_index)
+                path = get_ivf_path(collection_id)
+                if os.path.exists(path):
+                    return {
+                        "success": True,
+                        "message": f"IVF Index already saved at {path}",
+                        "collection_id": collection_id,
+                        "index_path": path,
+                    }
                 return {"success": False, "message": "No IVF index to save"}
 
             path = get_ivf_path(collection_id)

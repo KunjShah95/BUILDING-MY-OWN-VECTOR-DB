@@ -180,6 +180,7 @@ class MultimodalService:
         metadata: Optional[Dict[str, Any]] = None,
         vector_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        chunk_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
         try:
             coll = self.collection_service.get_collection(collection_id, tenant_id=tenant_id)
@@ -195,7 +196,44 @@ class MultimodalService:
             content_uri = save_media(collection["collection_id"], filename, raw)
 
             model_name = self._model_for_content(collection, "audio")
-            embedding = embed_audio(raw, model_name=model_name)
+            embedding = embed_audio(raw, model_name=model_name, chunk_seconds=chunk_seconds)
+
+            # Handle chunked audio (returns list of vectors)
+            if isinstance(embedding, list) and len(embedding) > 0 and isinstance(embedding[0], list):
+                segment_vectors = embedding  # list of segment vectors
+                created_ids = []
+                for idx, seg_vec in enumerate(segment_vectors):
+                    seg_meta = build_vector_metadata(
+                        collection,
+                        extra={
+                            **(metadata or {}),
+                            "modality": "audio",
+                            "content_type": "audio",
+                            "filename": filename,
+                            "segment_index": idx,
+                            "segment_count": len(segment_vectors),
+                            "chunk_seconds": chunk_seconds,
+                            "audio_duration_sec": len(segment_vectors) * (chunk_seconds or 5.0),
+                        },
+                        content_uri=content_uri,
+                    )
+                    seg_id = f"{vector_id}_seg{idx}" if vector_id else None
+                    result = self.vector_service.create_vector(
+                        vector_data=seg_vec,
+                        metadata=seg_meta,
+                        vector_id=seg_id,
+                        collection_id=collection["collection_id"],
+                    )
+                    if result.get("success"):
+                        created_ids.append(result.get("vector_id"))
+                return {
+                    "success": True,
+                    "message": f"Ingested {len(created_ids)}/{len(segment_vectors)} audio segments",
+                    "vector_ids": created_ids,
+                    "segment_count": len(segment_vectors),
+                }
+
+            # Single vector mode
             dim_check = self.collection_service.validate_vector_dimension(
                 collection_id, embedding
             )

@@ -44,7 +44,10 @@ class MetadataFilter:
         "exists": lambda col, key, val: col[key].isnot(None) if val else col[key].is_(None),
         "contains": lambda col, key, val: col[key].as_string().contains(str(val)),
         "regex": lambda col, key, val: col[key].as_string().regexp_match(str(val)),
-    }
+    # JSONB path operators
+    "contains_key": lambda col, key, val: col[key].isnot(None),
+    "type": lambda col, key, val: col[key].type == sa.cast(val, String),
+}
 
     @staticmethod
     def build_filters(model_class, filters: Optional[Dict[str, Any]]):
@@ -76,6 +79,39 @@ class MetadataFilter:
                 conditions.append(meta_col[key].as_string() == str(value))
 
         return conditions
+
+    @staticmethod
+    def pre_filter(
+        db_session,
+        model_class,
+        filters: Optional[Dict[str, Any]],
+        base_query=None,
+    ):
+        """
+        Apply metadata filters as SQL WHERE clauses (pre-filtering).
+
+        This filters vectors at the database level BEFORE ANN search,
+        reducing the number of vectors that need to be searched in-memory.
+
+        Args:
+            db_session: SQLAlchemy session
+            model_class: SQLAlchemy model class (e.g. Vector)
+            filters: Filter dict (same format as ``post_filter``)
+            base_query: Optional base query to chain from
+
+        Returns:
+            SQLAlchemy query with filter conditions applied, plus the filtered
+            vector IDs if simple eq filters are used (for ANN fallback).
+        """
+        if not filters:
+            return base_query if base_query is not None else db_session.query(model_class), None
+
+        query = base_query if base_query is not None else db_session.query(model_class)
+        conditions = MetadataFilter.build_filters(model_class, filters)
+        if conditions:
+            query = query.filter(*conditions)
+
+        return query, None
 
     @staticmethod
     def post_filter(results: List[Dict[str, Any]], filters: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
