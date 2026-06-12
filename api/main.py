@@ -106,6 +106,24 @@ app.middleware("http")(auth_middleware)
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
+
+@app.on_event("startup")
+async def _wal_startup_recovery():
+    """Replay any pending Write-Ahead Logs into their indexes on boot."""
+    try:
+        from services.startup_recovery import recover_all
+        from config.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            summary = recover_all(db)
+            if summary:
+                logger.info("WAL startup recovery replayed %d collection(s)", len(summary))
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001 - never block startup on recovery
+        logger.exception("WAL startup recovery failed (continuing without it)")
+
 # Dependency
 def get_vector_service(db: Session = Depends(get_db)) -> VectorService:
     """
@@ -570,6 +588,60 @@ async def search_engine_query(
         enable_gnn=enable_gnn
     )
     return result
+
+@app.post("/search-engine/hybrid-query", tags=["Search"])
+async def search_engine_hybrid_query(
+    request: Request,
+    collection_id: str = Query(...),
+    hybrid_query: str = Query(
+        ...,
+        description="Hybrid query DSL, e.g. (category = 'tech' AND price < 100) OR semantic_match(\"laptops\")",
+    ),
+    top_k: int = Query(10, ge=1, le=100),
+    multimodal_service: MultimodalService = Depends(get_multimodal_service),
+    search_engine: SearchEngineService = Depends(get_search_engine_service),
+):
+    """
+    Cost-based hybrid query. Parses a metadata + semantic_match() expression
+    into an AST and lets the optimizer choose filter-first vs vector-first
+    execution. Returns the chosen strategy alongside results.
+    """
+    from utils.query_planner import collect_semantic, parse_query
+
+    tenant_id = getattr(request.state, "tenant_id", None)
+
+    # Parse once so we can pull the semantic_match() text to embed
+    try:
+        ast = parse_query(hybrid_query)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid hybrid query: {exc}") from exc
+
+    semantics = collect_semantic(ast)
+    if semantics:
+        emb_res = multimodal_service.vector_service.embedding_service.embed_text(
+            [semantics[0].query]
+        )
+        if not emb_res.get("success") or not emb_res.get("embeddings"):
+            raise HTTPException(status_code=500, detail="Failed to embed semantic_match query")
+        query_vector = emb_res["embeddings"][0]
+    else:
+        # filter_only: no embedding needed; use a zero vector placeholder
+        query_vector = None
+
+    if query_vector is None:
+        # Pure metadata filter: a zero vector still lets vector_service scan;
+        # planner will run filter_only on the candidate set.
+        emb_res = multimodal_service.vector_service.embedding_service.embed_text([hybrid_query])
+        query_vector = emb_res.get("embeddings", [[0.0]])[0]
+
+    return search_engine.planned_search(
+        hybrid_query=hybrid_query,
+        query_vector=query_vector,
+        collection_id=collection_id,
+        tenant_id=tenant_id,
+        top_k=top_k,
+    )
+
 
 @app.post("/gnn/auto-tag", tags=["Index"])
 async def gnn_auto_tag(

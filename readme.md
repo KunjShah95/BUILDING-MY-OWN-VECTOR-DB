@@ -43,7 +43,11 @@ A **production-ready vector database** built from scratch in Python with **FastA
 - **Crash durability** — Write-Ahead Log with fsync + recovery replay; checkpoint/truncate after snapshot
 - **Background compaction** — HNSW soft-delete tombstones reclaimed by a daemon thread
 - **Larger-than-RAM storage** — memory-mapped vector store with dynamic growth and row reclamation
-- **Cost-based query planner** — AST parser for hybrid metadata + `semantic_match` queries with filter-first/vector-first optimization
+- **Cost-based query planner** — AST parser for hybrid metadata + `semantic_match` queries with filter-first/vector-first optimization, exposed at `/search-engine/hybrid-query`
+- **Row-level RBAC** — per-key operation gates + metadata-predicate document security (`utils/rbac.py`)
+- **Distributed query aggregation** — parallel scatter-gather coordinator with global top-K fusion (distance/RRF) and shard fault-tolerance
+- **Dynamic quantization** — memory-pressure-driven precision policy (fp32 → Int8 → PQ → Binary)
+- **Startup crash recovery** — pending WALs auto-replayed into HNSW/IVF indexes on boot
 - **Hybrid search** — Dense vector + BM25 sparse retrieval fused via Reciprocal Rank Fusion (RRF)
 - **Cross-encoder re-ranking** — Local `cross-encoder/ms-marco-MiniLM-L-6-v2` model + Cohere API fallback
 - **Multimodal ingestion** — Text (Sentence-Transformers), Image (CLIP ViT-B/32), Audio (librosa MFCC w/ chunking)
@@ -70,7 +74,7 @@ A **production-ready vector database** built from scratch in Python with **FastA
 - **Helm chart** — Kubernetes deployment with HPA, PVCs, and probes
 - **Terraform** — AWS and Azure infrastructure templates
 - **CI/CD** — GitHub Actions pipeline with lint, test, and build stages
-- **160+ tests** — Covering API endpoints, index algorithms, services, durability (WAL/compaction/mmap), query planner, and utilities
+- **190+ tests** — Covering API endpoints, index algorithms, services, durability (WAL/compaction/mmap), query planner, RBAC, distributed coordinator, dynamic quantization, and utilities
 
 ---
 
@@ -895,6 +899,10 @@ pytest test/ --cov=. --cov-report=html
 | `test/test_compaction.py` | HNSW tombstone soft-delete + background compaction |
 | `test/test_mmap_store.py` | Memory-mapped vector storage |
 | `test/test_query_planner.py` | AST parser + cost-based optimizer |
+| `test/test_rbac.py` | Row-level RBAC policy + permission gates |
+| `test/test_distributed_coordinator.py` | Parallel scatter-gather + fusion + fault tolerance |
+| `test/test_dynamic_quantization.py` | Memory-pressure precision policy |
+| `test/test_startup_recovery.py` | Pending-WAL detection for boot recovery |
 
 ---
 
@@ -959,6 +967,8 @@ pytest test/ --cov=. --cov-report=html
 │   ├── compaction.py           # Background tombstone compaction daemon
 │   ├── mmap_store.py           # Memory-mapped larger-than-RAM vector store
 │   ├── query_planner.py        # AST hybrid query parser + cost-based optimizer
+│   ├── rbac.py                 # Row-level RBAC (permission gates + metadata predicates)
+│   ├── dynamic_quantization.py # Memory-pressure precision policy (fp32→int8→pq→binary)
 │   ├── ivf_index.py            # IVF + coarse/fine quantizers
 │   ├── product_quantization.py # PQ index with ADC
 │   ├── int8_index.py           # Int8 quantization (4x compression)
@@ -1102,7 +1112,11 @@ See [SECURITY.md](SECURITY.md) for the full security policy.
 - [x] **Write-Ahead Logging (WAL)** with fsync durability + crash-recovery replay (`utils/wal.py`)
 - [x] **Background compaction** — HNSW tombstone soft-delete + daemon reclaim thread (`utils/compaction.py`)
 - [x] **Memory-mapped vector storage** for larger-than-RAM datasets (`utils/mmap_store.py`)
-- [x] **AST query planner + cost-based optimizer** for hybrid queries (`utils/query_planner.py`)
+- [x] **AST query planner + cost-based optimizer** for hybrid queries (`utils/query_planner.py`) + `/search-engine/hybrid-query` REST endpoint
+- [x] **Row-level RBAC** — operation gates + per-key metadata predicates (`utils/rbac.py`)
+- [x] **Distributed query aggregation** — parallel scatter-gather coordinator with global fusion + fault tolerance (`services/distributed_coordinator.py`)
+- [x] **Dynamic quantization policy** — memory-pressure precision tiers (`utils/dynamic_quantization.py`)
+- [x] **Startup crash recovery** — auto-replay pending WALs (HNSW + IVF) on boot (`services/startup_recovery.py`)
 - [x] Per-collection IVF index persistence (save/load/rebuild + REST endpoints)
 - [x] Cross-modal CLIP text→image search quality tuning (temperature + normalization)
 - [x] Long-audio chunking and segment-level vectors (`chunk_seconds` param)

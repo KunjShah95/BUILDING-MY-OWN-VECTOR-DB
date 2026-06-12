@@ -124,13 +124,33 @@ class WriteAheadLog:
         cutoff = self.last_checkpoint_ts()
         return [e for e in self.read_all() if e.get("ts", 0.0) > cutoff]
 
+    @staticmethod
+    def _index_insert(index, vec, vid, meta):
+        """Insert via whichever method the index exposes (HNSW: insert, IVF: add)."""
+        if hasattr(index, "insert"):
+            index.insert(vec, vid, meta)
+        elif hasattr(index, "add"):
+            index.add(vec, vid, meta)
+        else:
+            raise TypeError("index exposes neither insert() nor add()")
+
+    @staticmethod
+    def _index_delete(index, vid):
+        """Delete via whichever method the index exposes (HNSW: delete, IVF: delete_vector)."""
+        if hasattr(index, "delete"):
+            index.delete(vid)
+        elif hasattr(index, "delete_vector"):
+            index.delete_vector(vid)
+        else:
+            raise TypeError("index exposes neither delete() nor delete_vector()")
+
     def replay(self, index, on_apply: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
         """
         Re-apply pending WAL entries to an index after a crash.
 
-        The index must expose ``insert(vector, vector_id, metadata)`` and
-        ``delete(vector_id)``; metadata updates are applied to its
-        ``metadata`` dict when present (HNSWIndex-compatible).
+        Works with both HNSWIndex (``insert``/``delete``) and IVFIndex
+        (``add``/``delete_vector``); metadata updates are applied to the
+        index's ``metadata`` dict when present.
 
         Returns a summary dict: counts per operation and number of skipped
         (corrupt/unknown) entries.
@@ -143,10 +163,10 @@ class WriteAheadLog:
             data = entry.get("data", {})
             try:
                 if op == "INSERT":
-                    index.insert(data["vec"], data["id"], data.get("meta"))
+                    self._index_insert(index, data["vec"], data["id"], data.get("meta"))
                     applied["INSERT"] += 1
                 elif op == "DELETE":
-                    index.delete(data["id"])
+                    self._index_delete(index, data["id"])
                     applied["DELETE"] += 1
                 elif op == "UPDATE_META":
                     meta_store = getattr(index, "metadata", None)

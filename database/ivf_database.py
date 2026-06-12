@@ -6,6 +6,7 @@ from models.vector_model import VectorModel
 from utils.ivf_index import IVFIndex
 from utils.clustering import KMeans
 from utils.index_paths import ensure_index_dir, get_ivf_path
+from utils.wal import WriteAheadLog
 import numpy as np
 from datetime import datetime
 import json
@@ -182,6 +183,11 @@ class IVFVectorDatabase:
             ivf_index = IVFIndex()
             ivf_index.load(path)
 
+            # Crash recovery: re-apply WAL entries written after the snapshot
+            recovery = None
+            if ivf_index.is_trained:
+                recovery = WriteAheadLog(collection_id or "global").replay(ivf_index)
+
             key = self._scope_key(collection_id)
             self._scoped_ivf[key] = ivf_index
             if not collection_id:
@@ -197,6 +203,7 @@ class IVFVectorDatabase:
                 "stats": stats,
                 "collection_id": collection_id,
                 "index_path": path,
+                "wal_recovery": recovery,
             }
         except Exception as e:
             return {"success": False, "message": f"Error loading IVF index: {str(e)}"}

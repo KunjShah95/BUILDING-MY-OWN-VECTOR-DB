@@ -75,3 +75,24 @@ def test_replay_empty_wal_noop(wal):
     idx.insert(_rand(), "v0")
     summary = wal.replay(idx)
     assert summary["replayed"] == 0
+
+
+def test_replay_into_ivf_index_via_add_fallback(wal):
+    """WAL replay must work with IVFIndex (add / delete_vector method names)."""
+    from utils.ivf_index import IVFIndex
+
+    idx = IVFIndex(n_clusters=4)
+    train_data = [_rand() for _ in range(40)]
+    idx.train(train_data)
+    for i, v in enumerate(train_data):
+        idx.add(v, f"v{i}")
+
+    wal.checkpoint()
+    for i in range(40, 45):
+        wal.log_insert(f"v{i}", _rand(), None)
+    wal.log_delete("v0")
+
+    summary = wal.replay(idx)
+    assert summary["by_op"]["INSERT"] == 5
+    assert summary["by_op"]["DELETE"] == 1
+    assert summary["skipped"] == 0
