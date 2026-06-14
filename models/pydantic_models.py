@@ -539,3 +539,42 @@ class IndexTuningRecommendation(BaseModel):
 class IndexTuningResponse(BaseModel):
     success: bool
     recommendations: List[IndexTuningRecommendation] = []
+
+
+class DataRetentionPolicyCreate(BaseModel):
+    collection_id: str
+    ttl_days: int = 365
+    archive_after_days: Optional[int] = None
+    enabled: bool = True
+
+
+class DataRetentionPolicyResponse(BaseModel):
+    success: bool
+    policy: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None
+
+
+class QueryBudgetCreate(BaseModel):
+    tenant_id: str
+    max_vectors_scanned: int = 100000
+    max_ef_search: int = 800
+    max_concurrent_queries: int = 50
+    cost_limit_per_query: int = 1000
+
+
+class QueryBudgetResponse(BaseModel):
+    success: bool
+    budget: Optional[Dict[str, Any]] = None
+
+
+class ComplianceReportRequest(BaseModel):
+    report_type: str  # SOC2, GDPR, HIPAA
+    tenant_id: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class ComplianceReportResponse(BaseModel):
+    success: bool
+    report: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None

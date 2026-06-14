@@ -85,6 +85,9 @@ app = FastAPI(
         {"name": "Streaming Search", "description": "SSE streaming search and webhooks"},
         {"name": "Cache", "description": "Query result cache management"},
         {"name": "Tiered Storage", "description": "Hot/warm/cold storage tiers"},
+        {"name": "Enterprise", "description": "Compliance, data retention, query budgets"},
+        {"name": "Performance", "description": "Materialized views, adaptive index, benchmarks"},
+        {"name": "Integrations", "description": "Metadata enrichment, embedding model lifecycle"},
     ]
 )
 
@@ -1384,6 +1387,24 @@ logger.info("NL query API routes integrated")
 from api.routers.admin_index_tuning import router as index_tuning_router
 app.include_router(index_tuning_router, tags=["Admin"])
 logger.info("Index tuning API routes integrated")
+
+# ==================== Enterprise Routes ====================
+
+from api.routers.enterprise import router as enterprise_router
+app.include_router(enterprise_router, tags=["Enterprise"])
+logger.info("Enterprise API routes integrated")
+
+# ==================== Performance Routes ====================
+
+from api.routers.performance import router as performance_router
+app.include_router(performance_router, tags=["Performance"])
+logger.info("Performance API routes integrated")
+
+# ==================== Integration Routes ====================
+
+from api.routers.integrations import router as integrations_router
+app.include_router(integrations_router, tags=["Integrations"])
+logger.info("Integration API routes integrated")
 
 # ==================== GraphQL API ====================
 

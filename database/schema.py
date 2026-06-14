@@ -354,3 +354,40 @@ class MultiVectorGroup(Base):
     __table_args__ = (
         Index("idx_mvg_collection", "collection_id"),
     )
+
+
+class DataRetentionPolicy(Base):
+    __tablename__ = "data_retention_policies"
+    id = Column(Integer, primary_key=True, index=True)
+    collection_id = Column(String, nullable=False, index=True)
+    ttl_days = Column(Integer, nullable=False, default=365)
+    archive_after_days = Column(Integer, nullable=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (Index("idx_drp_collection", "collection_id"),)
+
+
+class QueryBudget(Base):
+    __tablename__ = "query_budgets"
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, nullable=False, index=True)
+    max_vectors_scanned = Column(Integer, default=100000)
+    max_ef_search = Column(Integer, default=800)
+    max_concurrent_queries = Column(Integer, default=50)
+    cost_limit_per_query = Column(Integer, default=1000)  # in operations
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (Index("idx_qb_tenant", "tenant_id"),)
+
+
+class ComplianceReport(Base):
+    __tablename__ = "compliance_reports"
+    id = Column(Integer, primary_key=True, index=True)
+    report_type = Column(String, nullable=False)  # SOC2, GDPR, HIPAA
+    tenant_id = Column(String, nullable=False, index=True)
+    status = Column(String, default="pending")  # pending, generated, failed
+    report_data = Column(JSON, nullable=True)
+    generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("idx_cr_tenant_type", "tenant_id", "report_type"),)
