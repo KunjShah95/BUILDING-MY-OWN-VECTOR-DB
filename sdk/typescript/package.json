@@ -1,0 +1,37 @@
+{
+  "name": "vector-db-client",
+  "version": "0.1.0",
+  "description": "TypeScript client for the Vector Database multimodal API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB.git"
+  },
+  "homepage": "https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB#readme",
+  "bugs": {
+    "url": "https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["vector-database", "vector-search", "ann", "hnsw", "client"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

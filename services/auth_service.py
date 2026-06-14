@@ -24,7 +24,18 @@ class APIKeyManager:
         name: str = "default",
         permissions: str = "read_write",
         collection_id: Optional[str] = None,
+        row_filter: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """Create a new API key with optional row-level security filter.
+
+        Args:
+            tenant_id: Tenant that owns this key.
+            name: Human-readable key name.
+            permissions: Permission level (read, write, read_write, admin).
+            collection_id: Optional collection scope.
+            row_filter: Optional metadata predicate DSL for row-level security,
+                e.g. "department = 'eng' AND clearance < 3".
+        """
         raw_key = self._generate_key()
         key_hash = self._hash_key(raw_key)
 
@@ -36,6 +47,7 @@ class APIKeyManager:
                 collection_id=collection_id,
                 name=name,
                 permissions=permissions,
+                row_filter=row_filter,
             )
             self.db.add(record)
             self.db.commit()
@@ -47,6 +59,7 @@ class APIKeyManager:
                 "collection_id": collection_id,
                 "name": name,
                 "permissions": permissions,
+                "row_filter": row_filter,
             }
         except Exception as e:
             self.db.rollback()
@@ -63,6 +76,9 @@ class APIKeyManager:
         if record.expires_at and record.expires_at < datetime.utcnow():
             return {"success": False, "message": "API key expired"}
 
+        if record.is_active is False:
+            return {"success": False, "message": "API key is disabled"}
+
         # Verify tenant is still active
         from database.schema import Tenant
         tenant = self.db.query(Tenant).filter(
@@ -78,6 +94,7 @@ class APIKeyManager:
             "collection_id": record.collection_id,
             "permissions": record.permissions,
             "name": record.name,
+            "row_filter": record.row_filter,
         }
 
     def revoke_key(self, api_key: str) -> Dict[str, Any]:

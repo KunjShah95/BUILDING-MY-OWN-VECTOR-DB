@@ -1,0 +1,602 @@
+{
+  "C:\\BUILDING MY OWN VECTOR DB\\cli.py": {
+    "mtime": 1780770585.2697973,
+    "hash": "82161203fb219e01ba6bb1a427f7c9ab"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\conftest.py": {
+    "mtime": 1780279468.341554,
+    "hash": "8f28990bdc946224c2ff96d51101e7e4"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\main.py": {
+    "mtime": 1780279468.362663,
+    "hash": "33ad39a807140f27db1cdfa4853a4a3b"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test_new_endpoints.py": {
+    "mtime": 1780364174.3766568,
+    "hash": "a433857e886bee1b7543d9eef0b293b2"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\alembic\\env.py": {
+    "mtime": 1780770623.1733341,
+    "hash": "e10408767e340338bf25890517bff131"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\main.py": {
+    "mtime": 1780771050.5829515,
+    "hash": "2a873685f47f6b38d55c4865aace9b74"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\graphql\\schema.py": {
+    "mtime": 1780364174.3633065,
+    "hash": "e433c1a76df7077e49f12b598706eb4c"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\graphql\\__init__.py": {
+    "mtime": 1780364174.3623059,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\grpc\\server.py": {
+    "mtime": 1780282149.3792524,
+    "hash": "4c9874edf2a02b6644828f3098b8a88b"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\grpc\\__init__.py": {
+    "mtime": 1780282149.378222,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\middleware\\auth_middleware.py": {
+    "mtime": 1780282149.3813617,
+    "hash": "a73391ad9743b78e3fb7f022b81e59a4"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\middleware\\__init__.py": {
+    "mtime": 1780279468.3345015,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\auth_api.py": {
+    "mtime": 1780281523.1242251,
+    "hash": "3ab2c76960dc91e86b9842e2cad397b4"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\dashboard.py": {
+    "mtime": 1780282149.3824344,
+    "hash": "5225fbe6ff1d8a54a507cd70b75d1cf4"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\ingestion.py": {
+    "mtime": 1780364174.3653316,
+    "hash": "9e75645d2572f784d0b3b9dd432444d6"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\openai_compat.py": {
+    "mtime": 1780282149.3829596,
+    "hash": "6036ed6844e978bed04af38fafdfac78"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\rag.py": {
+    "mtime": 1780282149.383517,
+    "hash": "e3c24a955235eed76771a8cfd9301a59"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\search_enhanced.py": {
+    "mtime": 1780282149.3840618,
+    "hash": "b6f15b18d4303a1cec64dc38d97c3db6"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\streaming_rag.py": {
+    "mtime": 1780282149.384571,
+    "hash": "dbf9cb1db96edced672fcd34a6520a61"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\tenants.py": {
+    "mtime": 1780282149.385121,
+    "hash": "bdf480d3ef999efe2b8b67a9964cb924"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\timeseries.py": {
+    "mtime": 1780364174.3658428,
+    "hash": "009ff1ba9f64ce0094064c17afdf49e7"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\ws_search.py": {
+    "mtime": 1780282149.3856378,
+    "hash": "38fdb4e0782b13cf59fc111ee7c5a348"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\routers\\__init__.py": {
+    "mtime": 1780282149.3818815,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\static\\app.js": {
+    "mtime": 1780282149.3867342,
+    "hash": "341a36e9b5dc858ab6b6c0116a19aa6a"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\config\\database.py": {
+    "mtime": 1780769696.779129,
+    "hash": "525545182c1530b2d1ce3c7f19b4d8c6"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\config\\logging.py": {
+    "mtime": 1780279468.3390367,
+    "hash": "91983f311b7fb966bfd7174255c9aaaf"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\config\\settings.py": {
+    "mtime": 1780282149.3883474,
+    "hash": "2c4ee2521ccdfd8579a90bd359027792"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\database\\hnsw_database.py": {
+    "mtime": 1780280871.0479841,
+    "hash": "8d0e777eac4d4f185abd41760c815912"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\database\\ivf_database.py": {
+    "mtime": 1780364174.366822,
+    "hash": "3ebfd456e217d6cfa71879a1ef8e2567"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\database\\schema.py": {
+    "mtime": 1780364174.3678555,
+    "hash": "de1f5ed1c446f219d8353527a7142cf0"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\database\\vector_database.py": {
+    "mtime": 1780282149.390434,
+    "hash": "4d0f0e3506681347bad246530e8b00eb"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\examples\\indexer_examples.py": {
+    "mtime": 1780279468.3509347,
+    "hash": "54ae9a665754b7f4191b2e0cfef50a84"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\examples\\multimodal_demo.py": {
+    "mtime": 1780279468.3515842,
+    "hash": "b1b629ed98786f991b08c911b7c3645c"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\examples\\vector_indexer_api.py": {
+    "mtime": 1780279468.3526032,
+    "hash": "85787a4c67746fa433a4538921386a45"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\examples\\__init__.py": {
+    "mtime": 1780279468.3494256,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\models\\pydantic_models.py": {
+    "mtime": 1780282149.4032764,
+    "hash": "a9c5945009dc021f50878c55db04158f"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\models\\vector_model.py": {
+    "mtime": 1780364174.3684058,
+    "hash": "c4601706ebf503cff1f92400effcb29d"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\scripts\\run_benchmark.py": {
+    "mtime": 1780279468.3681858,
+    "hash": "c84dfa0cd3b8b580884266f7d668fb8b"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\scripts\\run_local.ps1": {
+    "mtime": 1780279468.3691883,
+    "hash": "bd0d7c556a4140df90352104a0c26d6a"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\scripts\\scale_benchmark.py": {
+    "mtime": 1780280871.0568173,
+    "hash": "73c04429dba7b08ac2328054f391ae77"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\client.py": {
+    "mtime": 1780770602.0803914,
+    "hash": "1c87302f36b38d3d41ce4b58f39f9b5a"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\tests\\conftest.py": {
+    "mtime": 1780282149.4081376,
+    "hash": "b55ca77c0b7f866e7cca930ff9fb8008"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\tests\\test_client.py": {
+    "mtime": 1780282149.408664,
+    "hash": "089195488df93cd04c851e03bffcefc4"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\tests\\__init__.py": {
+    "mtime": 1780282149.4075663,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\client.py": {
+    "mtime": 1780279468.374725,
+    "hash": "3beb102ebb14a33edb81f192d236a1cd"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\collections.py": {
+    "mtime": 1780279468.374725,
+    "hash": "44eb2c3d263b576c0d99b1a92aea490a"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\exceptions.py": {
+    "mtime": 1780279468.375724,
+    "hash": "4be0ee976f1b4cae789760e5d4161cca"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\langchain_vectorstore.py": {
+    "mtime": 1780282149.4096777,
+    "hash": "d371627da4f08904dbfac508281b8029"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\models.py": {
+    "mtime": 1780279468.376725,
+    "hash": "458f445f455e41fad6aef8bebf6c78c5"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\multimodal.py": {
+    "mtime": 1780279468.377725,
+    "hash": "e58cb8feda8d8418e158c22da6817495"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\vectors.py": {
+    "mtime": 1780279468.377725,
+    "hash": "a1c96a4d8b77f8902754402f637882e9"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\_http.py": {
+    "mtime": 1780279468.3737154,
+    "hash": "81bd178916fd7d20fd962b24c293d355"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\vector_db_client\\__init__.py": {
+    "mtime": 1780282149.4096777,
+    "hash": "54f4b17d07bb7057837fe5b3675d835e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\auth_service.py": {
+    "mtime": 1780282149.4109783,
+    "hash": "4627b3d56ac61cf7efb197075d2b9da0"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\auto_reindex.py": {
+    "mtime": 1780282149.4114819,
+    "hash": "7331f36b2ee73d4a7a1f348faedcf544"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\cache_service.py": {
+    "mtime": 1780282149.4120107,
+    "hash": "172563b0ef3401e35f31764cc981d78b"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\collection_index_service.py": {
+    "mtime": 1780282149.4125347,
+    "hash": "5f241560b3760ae496295903e7589197"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\collection_service.py": {
+    "mtime": 1780282149.4130614,
+    "hash": "a1ab5f538e724a329d127271585579ae"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\embedding_service.py": {
+    "mtime": 1780364174.3716383,
+    "hash": "e074a3c81747e05e1419ce9dc8ce5b9d"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\gnn_service.py": {
+    "mtime": 1780770993.1076362,
+    "hash": "50af032b6c63af4b322b47ffcea2c17c"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\hybrid_search_service.py": {
+    "mtime": 1780282149.414099,
+    "hash": "cdeac5cbbb966dbbda62d7ac5c1df0fd"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\ingestion_service.py": {
+    "mtime": 1780282149.4146194,
+    "hash": "01f9d55b162a1fda71724638adcc02f1"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\media_store.py": {
+    "mtime": 1780364174.3722293,
+    "hash": "994cb45fa31fdb86193fb381c8de5941"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\metadata_filter.py": {
+    "mtime": 1780364174.3728843,
+    "hash": "e535c87a134eac0ff59502d30d3df3eb"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\multimodal_service.py": {
+    "mtime": 1780364174.373947,
+    "hash": "c86203bc67a25fb119532ff25f6364bf"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\rag_service.py": {
+    "mtime": 1780769960.9402747,
+    "hash": "d77002feb50c5652f73b09bb832a73db"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\reranker_service.py": {
+    "mtime": 1780282149.4162447,
+    "hash": "9a87267f9782a591f62d0f050dcadb5c"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\search_engine_service.py": {
+    "mtime": 1780771836.264546,
+    "hash": "dbb8336d67d962c58eb73703aaf83a2f"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\storage_backend.py": {
+    "mtime": 1780282149.4167917,
+    "hash": "c52c841b848fc55a0933b17edb351e1f"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\streaming_rag_service.py": {
+    "mtime": 1780282149.4173164,
+    "hash": "e5df9f46d6ae37575847158d06ad47d0"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\tenant_service.py": {
+    "mtime": 1780282149.4183564,
+    "hash": "0c0eef5c21967579d35b221c37566a64"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\vector_indexer.py": {
+    "mtime": 1780282149.4188778,
+    "hash": "ebfc7271834b19a7295fe432d8e0231c"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\services\\vector_service.py": {
+    "mtime": 1780772993.7834835,
+    "hash": "5aa42b1ebca0ce9baea19a4a2ab4ffe6"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_api.py": {
+    "mtime": 1780279468.3996918,
+    "hash": "23a0b35e2c5e695617ff613c54934aac"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_auth_middleware.py": {
+    "mtime": 1780282149.4204366,
+    "hash": "d0c1d55ce5001f4d9af2829bc5f29475"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_auth_service.py": {
+    "mtime": 1780282149.421532,
+    "hash": "46bebb1a95f7a34184a4667b7c47b554"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_cache_service.py": {
+    "mtime": 1780282149.4221191,
+    "hash": "b0ad4b2d87e8c37b45c26e3e873a1b02"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_clustering.py": {
+    "mtime": 1780282149.4226427,
+    "hash": "84468c33f6ced2c975437b07f445f8f9"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_collections_api.py": {
+    "mtime": 1780279468.4016447,
+    "hash": "161aec40e852134a9a8c15ac24acf1a1"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_comprehensive.py": {
+    "mtime": 1780282149.423199,
+    "hash": "1dbec5fa8717b697d9ad3c8ce8f0e94b"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_document_processor.py": {
+    "mtime": 1780282149.4237204,
+    "hash": "cbffe2789ff5ca038ccb430c5386136b"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_hnsw.py": {
+    "mtime": 1780279468.4036608,
+    "hash": "4b70f6ec28f97a7eee23b83b7b6ea966"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_hybrid_search.py": {
+    "mtime": 1780282149.4242465,
+    "hash": "38e820bae2cadbee934a747d72863c0b"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_image_metadata.py": {
+    "mtime": 1780279468.4046583,
+    "hash": "319a5b553e81e1f506bc54d00f1003b8"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_ivf.py": {
+    "mtime": 1780279468.405675,
+    "hash": "1440cbdd9297657cf3a4eb56fe1108c1"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_ivf_per_collection.py": {
+    "mtime": 1780282149.4247644,
+    "hash": "cb2683f887fe5a15b58cf8d71d4dbf12"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_kdtree.py": {
+    "mtime": 1780282149.4252894,
+    "hash": "b1e1acc4dca4aed08fa9027ec7f66a54"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_langchain_vectorstore.py": {
+    "mtime": 1780282149.426334,
+    "hash": "178a07f6d92e2232268ba3e993060cea"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_multimodal.py": {
+    "mtime": 1780280871.0872633,
+    "hash": "91f1abfca65c06caa33dcc74e2a344fc"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_multimodal_media.py": {
+    "mtime": 1780280871.0882378,
+    "hash": "2227820d8b3238f038f50828fb727aa7"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_multi_tenancy.py": {
+    "mtime": 1780282149.4268732,
+    "hash": "7d7d4364dc72c2f7dac4bb2cb381bfe2"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_openai_compat.py": {
+    "mtime": 1780282149.427381,
+    "hash": "e5600b6f13b15e6d1d6eb265837d9c70"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_phase1_unit.py": {
+    "mtime": 1780280871.0894244,
+    "hash": "14d27c2a99d2755ebb3c8a64bf63fb28"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_product_quantization.py": {
+    "mtime": 1780282149.4279022,
+    "hash": "3b6392e1781670cab0701bb2c2c4d173"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_rag.py": {
+    "mtime": 1780282149.4284284,
+    "hash": "0dcdc2baa94a687de3e11850aa705aa2"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_reranker.py": {
+    "mtime": 1780282149.4289541,
+    "hash": "d5784644cce2aa314b54d38f11bfe740"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_storage_backend.py": {
+    "mtime": 1780282149.430011,
+    "hash": "b20315f637449240fc0c0389452573e9"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_vector_db.py": {
+    "mtime": 1780280848.665581,
+    "hash": "b6b4d7f3dbc1281272ad123bf2ca0c14"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\test_ws_search.py": {
+    "mtime": 1780282149.430011,
+    "hash": "dc1d017924433fbc09c031633f165b33"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test\\__init__.py": {
+    "mtime": 1780279468.3996918,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\benchmark.py": {
+    "mtime": 1780279468.4134681,
+    "hash": "36796e470e0773a2816aab3ce7890f31"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\bm25_index.py": {
+    "mtime": 1780282149.432694,
+    "hash": "971c2e3ef0abfebf026a2816ed0213fd"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\clustering.py": {
+    "mtime": 1780282149.4332242,
+    "hash": "248ea4c8e5b167704779cfb3dfbf0b3d"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\distance.py": {
+    "mtime": 1780769523.1542256,
+    "hash": "ecfbade6f09dd2d1e0d071a513cc28f5"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\document_processor.py": {
+    "mtime": 1780282149.4342308,
+    "hash": "e3849f2aebdf174003be6d598a3f9cad"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\filtered_search.py": {
+    "mtime": 1780769727.0393982,
+    "hash": "e4fc7b5fe619e25bf27a06755b1095cb"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\gpu_kernels.py": {
+    "mtime": 1780282149.434735,
+    "hash": "4cba5281d1ee0ff1256a01096cf713b3"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\hnsw_index.py": {
+    "mtime": 1780769654.924966,
+    "hash": "6c5c1538671f4186d2229dd3d915ac0c"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\hybrid_search.py": {
+    "mtime": 1780282149.4363072,
+    "hash": "c1a572003da48048f1cd20f1b95a5b04"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\image_metadata.py": {
+    "mtime": 1780279468.4174807,
+    "hash": "87e84dda13e4b1b5045f63f3ae0f6fb6"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\index_health.py": {
+    "mtime": 1780770244.7664704,
+    "hash": "71683899f755a015dc3c753218735d83"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\index_paths.py": {
+    "mtime": 1780282149.4368536,
+    "hash": "f697a53eacb7d28ff7cf8097d1351504"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\index_serializer.py": {
+    "mtime": 1780282149.4379425,
+    "hash": "0d6803752f3f2459bf687a51b9938aed"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\int8_index.py": {
+    "mtime": 1780364174.3772206,
+    "hash": "6fc55e050bd9615dafc5f840ab4ad01a"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\ivf_index.py": {
+    "mtime": 1780282149.4384613,
+    "hash": "bb39f8088a4a673215ca24da267430d0"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\kdtree_index.py": {
+    "mtime": 1780282149.4395273,
+    "hash": "418a19f074a32eeca656da3c09a976cf"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\lsh_index.py": {
+    "mtime": 1780280871.0967972,
+    "hash": "9d419e6de556422024333dac2dff17e5"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\metadata_contract.py": {
+    "mtime": 1780280871.0973248,
+    "hash": "f8ca0209612521d68ca961a6a2df328e"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\optimization.py": {
+    "mtime": 1780769679.3107023,
+    "hash": "0ab706967c9e476f3e801b0a1ef40dd0"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\partitioned_index.py": {
+    "mtime": 1780364174.3782804,
+    "hash": "48e7209716e4aa091d6343be08e5a3c5"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\pdf_processor.py": {
+    "mtime": 1780282149.4400482,
+    "hash": "53bfd1717582029efd97de5a4c729f3f"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\product_quantization.py": {
+    "mtime": 1780282149.4405806,
+    "hash": "8f0de62bebbab21875b7153526fb44d8"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\rag_eval.py": {
+    "mtime": 1780770206.0652053,
+    "hash": "8b5f3d69eb19f38107707f547ddbc449"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\telemetry.py": {
+    "mtime": 1780770233.8378887,
+    "hash": "7a33afa584c996b6b70ef5869b6fc620"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\text_chunker.py": {
+    "mtime": 1780770072.8902001,
+    "hash": "014558b94446925153c4e1e8efd4dd98"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\vp_tree.py": {
+    "mtime": 1780280871.0997026,
+    "hash": "10c4ce4ab2dd4a7466f1117b9e2a99aa"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\wal.py": {
+    "mtime": 1780772897.6187024,
+    "hash": "deb28b66bcd196740cd481314423d04c"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\utils\\__init__.py": {
+    "mtime": 1780279468.4119563,
+    "hash": "55497bd6939cd5ddc5f31d71aaf96ac5"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\API_INTEGRATION_GUIDE.md": {
+    "mtime": 1780279468.3318179,
+    "hash": "99293e388dc95f1b2cddbdad67406a49"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\CHANGELOG.md": {
+    "mtime": 1780282149.3761,
+    "hash": "aab33dba503e6c94b9b257d4794edd99"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\CODE_OF_CONDUCT.md": {
+    "mtime": 1780364174.3138955,
+    "hash": "88b7e7b53eb8e1efcb0a2c823a1b2119"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\CONTRIBUTING.md": {
+    "mtime": 1780282149.3771806,
+    "hash": "db58d6b83d2e1464a20599768ad6b655"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\docker-compose.yaml": {
+    "mtime": 1780772005.0146694,
+    "hash": "62714d9fe89cf549796aa33384dfe13d"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\prometheus.yml": {
+    "mtime": 1780279468.3661826,
+    "hash": "5ae539994bc552701ffd77bb0890d43a"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\readme.md": {
+    "mtime": 1780773029.7578924,
+    "hash": "ae8c3b5bc210d5d6ac2034dd239696d5"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\requirements.txt": {
+    "mtime": 1780364174.370582,
+    "hash": "63ad725f6460105b32a08bded29e9350"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\ROADMAP.md": {
+    "mtime": 1780773012.454185,
+    "hash": "291edaccc77fe529446eca488bc52721"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\SECURITY.md": {
+    "mtime": 1780282149.3776996,
+    "hash": "78c3291b89f939085fed6927df743aec"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\test_write.txt": {
+    "mtime": 1780279468.4119563,
+    "hash": "d8e8fca2dc0f896fd7cb4cb0031ba249"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\api\\static\\index.html": {
+    "mtime": 1780282149.387267,
+    "hash": "51578f1e8d534849eb9e79f2cc1e0440"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\Chart.yaml": {
+    "mtime": 1780282149.3969913,
+    "hash": "8778d3de4674125e0dda35a7dc036b5f"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\values.yaml": {
+    "mtime": 1780282149.4016829,
+    "hash": "34ccca4069b33f5bd1c915b9e6dae404"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\templates\\deployment.yaml": {
+    "mtime": 1780282149.398555,
+    "hash": "53d55edc8ea05f442d026251e32ebe74"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\templates\\hpa.yaml": {
+    "mtime": 1780282149.3990753,
+    "hash": "aa8657bfdee2b664f30f72ed9e1096d2"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\templates\\ingress.yaml": {
+    "mtime": 1780282149.3995924,
+    "hash": "c164f9853b46a350fa30a9f4a6c43351"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\templates\\NOTES.txt": {
+    "mtime": 1780282149.397515,
+    "hash": "993adef9939aed4d36b93bffd49e60de"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\templates\\pvc.yaml": {
+    "mtime": 1780282149.400118,
+    "hash": "283178b9c0527c80f249717f98822dad"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\templates\\service.yaml": {
+    "mtime": 1780282149.401166,
+    "hash": "efc6b561a911fc8a2a6aa7c1a0ee5d44"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\helm\\vector-db\\templates\\serviceaccount.yaml": {
+    "mtime": 1780282149.401166,
+    "hash": "adddbeb3711f6eb125e3b477883aeb03"
+  },
+  "C:\\BUILDING MY OWN VECTOR DB\\sdk\\README.md": {
+    "mtime": 1780279468.3717022,
+    "hash": "ebe7ca20cd8630294e42f7e66e08e59a"
+  }
+}

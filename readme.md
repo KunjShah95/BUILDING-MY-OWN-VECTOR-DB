@@ -67,6 +67,8 @@ A **production-ready vector database** built from scratch in Python with **FastA
 - **Distributed/partitioned indexes** — Hash/range partitioning across HNSW/IVF/PQ/Int8 shards
 - **CLIP quality tuning** — Temperature scaling and normalization control for cross-modal text→image search
 - **GPU acceleration** — Optional CuPy kernels for batch distance computation
+- **GPU indexing** — Full CuPy-based index construction (k-means, HNSW neighbor selection, PQ training) (`utils/gpu_indexing.py`)
+- **SIMD/AVX-512 kernels** — Auto-detecting SIMD-optimized distance kernels via Numba JIT + C++/PyBind11 (`utils/simd_kernels.py`)
 - **Prometheus metrics** — `/metrics` endpoint with request counters and latency histograms
 - **Dashboard UI** — Real-time monitoring with Chart.js visualizations
 - **Python SDK** — `vector_db_client` PyPI package with full API coverage
@@ -74,7 +76,11 @@ A **production-ready vector database** built from scratch in Python with **FastA
 - **Helm chart** — Kubernetes deployment with HPA, PVCs, and probes
 - **Terraform** — AWS and Azure infrastructure templates
 - **CI/CD** — GitHub Actions pipeline with lint, test, and build stages
-- **190+ tests** — Covering API endpoints, index algorithms, services, durability (WAL/compaction/mmap), query planner, RBAC, distributed coordinator, dynamic quantization, and utilities
+- **CI/CD** — GitHub Actions pipeline with Python (test + lint + Docker), TypeScript SDK (typecheck + test + build + audit), and Go SDK (build + vet + test) jobs
+- **660+ Python tests** + **91 TypeScript SDK tests** + **64 Go SDK tests** — Covering API endpoints, index algorithms, services, durability, ML models, and infrastructure utilities
+- **TypeScript SDK** — Full-featured client with `VectorDBClient`, typed models, per-request options, context cancellation
+- **Go SDK** — Idiomatic Go client with typed structs, context support, functional request options
+- **SDK Compatibility Matrix** — See [sdk/COMPATIBILITY.md](sdk/COMPATIBILITY.md) for detailed feature comparison across Python, TypeScript, and Go
 
 ---
 
@@ -487,6 +493,17 @@ The `services/` directory contains the core business logic:
 | `MetadataFilter` | `services/metadata_filter.py` | SQL pre-filtering + post-filtering with 10+ operators |
 | `AutoReindexService` | `services/auto_reindex.py` | Threshold-based automatic index rebuild scheduling |
 | `VectorIndexer` | `services/vector_indexer.py` | Unified indexer API with parameter auto-optimization |
+| `SearchEngineService` | `services/search_engine_service.py` | Hybrid query planning endpoint with AST-based optimization |
+| `DistributedCoordinator` | `services/distributed_coordinator.py` | Parallel scatter-gather query aggregation, global top-K fusion, shard fault tolerance |
+| `GNNService` | `services/gnn_service.py` | GCN node embeddings, temporal graph dynamics, link prediction for metadata enrichment |
+| `RaftCoordinator` | `services/raft_coordinator.py` | Raft consensus engine, leader election, distributed WAL replication, multi-node cluster registry |
+| `CDCConnector` | `services/cdc_connector.py` | Kafka/Debezium change data capture for real-time streaming ingestion |
+| `MCPServer` | `services/mcp_server.py` | Model Context Protocol server for AI agent tool integration (execute_tool, list_tools) |
+| `LTRService` | `services/ltr_service.py` | XGBoost LambdaMART learning-to-rank trained on click-through feedback |
+| `PersonalizationService` | `services/personalization_service.py` | User-profile embedding injection, preference learning from interaction history |
+| `RealtimeConnector` | `services/realtime_connector.py` | Web crawler, RSS feed, and REST API connectors for live data ingestion |
+| `StartupRecovery` | `services/startup_recovery.py` | Auto-detect and replay pending WALs for all collections on app boot |
+| `BackupService` | `services/backup_service.py` | Point-in-time recovery from WAL snapshots, scheduled S3/Azure backups |
 
 ---
 
@@ -543,6 +560,125 @@ SDK API surface:
 | `client.multimodal` | `ingest_text`, `search_text`, `ingest_image`, `search_image`, `ingest_audio`, `search_audio` |
 
 Errors raise `VectorDBHTTPError` with `status_code` and `detail`.
+
+### TypeScript SDK (`sdk/typescript/`)
+
+Install from npm (once published):
+
+```bash
+npm install @kunjshah95/vector-db-client
+```
+
+```typescript
+import { VectorDBClient } from "@kunjshah95/vector-db-client";
+
+const client = new VectorDBClient({
+  baseUrl: "http://localhost:8000",
+  headers: { Authorization: "Bearer my-key" },
+});
+
+// Collections
+const col = await client.collections.create({
+  name: "Docs",
+  collectionId: "product-docs",
+  modality: "text",
+  dimension: 384,
+});
+
+// Ingest & search
+await client.multimodal.ingestText("product-docs", {
+  text: "Returns are accepted within 30 days.",
+  vectorId: "policy-returns",
+});
+const hits = await client.multimodal.searchText("product-docs", {
+  query: "how do I return an item?",
+  k: 5,
+});
+console.log(hits.results[0].vectorId, hits.results[0].distance);
+
+// Vector CRUD
+await client.vectors.create({ vector: [0.1, 0.2, 0.3] });
+await client.vectors.get("vec_abc123");
+await client.vectors.delete("vec_abc123");
+
+// Image/audio via Blob/File
+await client.multimodal.ingestImage("photos", { blob: imageBlob });
+```
+
+| Resource | Methods |
+|----------|---------|
+| `client.collections` | `create`, `list`, `get`, `delete`, `buildIndex`, `indexStats` |
+| `client.vectors` | `create`, `get`, `delete`, `search` |
+| `client.multimodal` | `ingestText`, `searchText`, `ingestImage`, `searchImage`, `ingestAudio`, `searchAudio`, `query` (RAG) |
+
+```bash
+# Test from the SDK directory
+cd sdk/typescript
+npm install
+npm run typecheck
+npm test         # 91 tests (unit + integration + edge cases)
+npm run build
+```
+
+### Go SDK (`sdk/go/`)
+
+```bash
+go get github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB/sdk/go
+```
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB/sdk/go/vectordb"
+)
+
+func main() {
+    client := vectordb.NewClient(vectordb.ClientOptions{
+        BaseURL: "http://localhost:8000",
+    })
+
+    ctx := context.Background()
+
+    col, _ := client.Collections.Create(ctx, vectordb.CreateCollectionParams{
+        Name: "Docs", Dimension: 384, Modality: "text",
+    })
+    fmt.Println(col.CollectionID)
+
+    client.Multimodal.IngestText(ctx, "docs", vectordb.IngestTextParams{
+        Text: "Returns accepted within 30 days.", VectorID: "policy-returns",
+    })
+
+    result, _ := client.Multimodal.SearchText(ctx, "docs", vectordb.SearchTextParams{
+        Query: "return policy", K: 5,
+    })
+    fmt.Println(result.Results[0].VectorID, result.Results[0].Distance)
+}
+```
+
+| Resource | Methods |
+|----------|---------|
+| `client.Collections` | `Create`, `List`, `Get`, `Delete`, `BuildIndex`, `IndexStats` |
+| `client.Vectors` | `Create`, `Get`, `Delete`, `Search` |
+| `client.Multimodal` | `IngestText`, `SearchText`, `IngestImage`, `SearchImage`, `IngestAudio`, `SearchAudio`, `Query` (RAG) |
+
+```bash
+# Test from the SDK directory
+cd sdk/go
+go build ./vectordb/...
+go vet ./vectordb/...
+go test ./vectordb/...     # 64 tests
+```
+
+### SDK Compatibility Matrix
+
+See [sdk/COMPATIBILITY.md](sdk/COMPATIBILITY.md) for a detailed feature-by-feature comparison across all three SDKs (Python, TypeScript, Go), covering:
+- Client initialization (timeouts, headers, context cancellation, custom transport)
+- Collections, Vectors, and Multimodal API coverage
+- Error handling, typed models, HTTP layer
+- LangChain integration, test coverage
 
 ### LangChain Integration
 
@@ -812,13 +948,9 @@ terraform init && terraform apply
 
 Actively evolving toward a fully distributed, enterprise-grade vector database. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-**Recently shipped (Phase 1 + Phase 4):**
-- ✅ Write-Ahead Logging with crash-recovery replay (`utils/wal.py`)
-- ✅ Background tombstone compaction for HNSW (`utils/compaction.py`)
-- ✅ Memory-mapped vector storage for larger-than-RAM datasets (`utils/mmap_store.py`)
-- ✅ AST hybrid query parser + cost-based optimizer (`utils/query_planner.py`)
+**All 9 roadmap phases are complete.** See [ROADMAP.md](ROADMAP.md) for Phase 10–14 plans.
 
-**Coming next:** DiskANN on-disk graphs, horizontal sharding + distributed query aggregation, Raft replication, CDC ingestion (Kafka), and row-level RBAC.
+**Next challenges (Phase 10+):** AI-native search tuning, billion-scale benchmarks, multi-region replication, ecosystem SDKs (JS/TS, Go, Java, Rust), real-time streaming search.
 
 ---
 
@@ -854,14 +986,22 @@ All services use Python's `logging` module with consistent format:
 
 ## Testing
 
-The project has **130+ tests** covering API endpoints, indexing algorithms, services, and utilities.
+The project has **660+ Python tests** (52 files) + **91 TypeScript SDK tests** + **64 Go SDK tests** covering API endpoints, indexing algorithms, services, durability, ML models, and infrastructure utilities.
 
 ```powershell
-# Run all tests
+# Run Python server tests
 pytest test/ -v
 
-# Run SDK tests
+# Run Python SDK tests
 pytest sdk/tests/ -v
+
+# Run TypeScript SDK tests
+cd sdk/typescript
+npm test
+
+# Run Go SDK tests
+cd sdk/go
+go test ./vectordb/... -v
 
 # Run by category
 pytest test/ -k "hnsw" -v      # HNSW-specific tests
@@ -903,6 +1043,33 @@ pytest test/ --cov=. --cov-report=html
 | `test/test_distributed_coordinator.py` | Parallel scatter-gather + fusion + fault tolerance |
 | `test/test_dynamic_quantization.py` | Memory-pressure precision policy |
 | `test/test_startup_recovery.py` | Pending-WAL detection for boot recovery |
+| `test/test_vamana.py` | Vamana/DiskANN on-disk graph correctness |
+| `test/test_e2e_integration.py` | End-to-end integration tests (LTR, backup, MCP) |
+| `test/test_encryption.py` | AES-256-GCM encryption at rest |
+| `test/test_audit_log.py` | Audit log immutability and tamper detection |
+| `test/test_pii_redaction.py` | PII redaction patterns and data residency |
+| `test/test_mtls_service.py` | mTLS certificate generation and verification |
+| `test/test_gnn_training.py` | GCN training, temporal dynamics, link prediction |
+| `test/test_ltr_service.py` | XGBoost LambdaMART learning-to-rank |
+| `test/test_personalization_service.py` | User-profile embedding and preference learning |
+| `test/test_cdc_connector.py` | Kafka/Debezium CDC ingestion pipeline |
+| `test/test_raft_coordinator.py` | Raft leader election and WAL replication |
+| `test/test_mcp_server.py` | MCP execute_tool and list_tools functions |
+| `test/test_llama_index_adapter.py` | LlamaIndex vector store integration |
+| `test/test_simd_kernels.py` | SIMD/AVX-512 distance kernel correctness |
+| `test/test_opentelemetry_tracing.py` | OpenTelemetry span creation and propagation |
+| `test/test_suggest_params_api.py` | AI-powered index parameter suggestion API |
+| `test/test_backup_service.py` | WAL archive, restore, and lifecycle management |
+| `test/test_metadata_filter.py` | Metadata DSL parsing, all 11 operators, post-filter |
+
+### CI/CD Pipelines
+
+The project runs three parallel CI workflows on every push/PR:
+
+| Workflow | Triggers | Jobs |
+|----------|----------|------|
+| `ci.yml` | Push to `main`/`develop`, PR to `main` | Python test + lint, TypeScript SDK, Go SDK |
+| `npm-publish.yml` | Release publish, `v*` tag push | TypeScript SDK test → build → publish (npm provenance) |
 
 ---
 
@@ -942,7 +1109,7 @@ pytest test/ --cov=. --cov-report=html
 ├── models/                      # Pydantic & data models
 │   ├── pydantic_models.py      # Request/response schemas (40+ models)
 │   └── vector_model.py         # Vector CRUD model with brute-force search
-├── services/                    # Business logic layer (18 services)
+├── services/                    # Business logic layer (29 services)
 │   ├── vector_service.py       # Main vector CRUD + orchestration
 │   ├── collection_service.py   # Collection CRUD + dimension validation
 │   ├── collection_index_service.py  # Per-collection index management
@@ -960,8 +1127,19 @@ pytest test/ --cov=. --cov-report=html
 │   ├── storage_backend.py      # Local/S3/Azure storage abstraction
 │   ├── metadata_filter.py      # JSONB metadata post-filtering
 │   ├── auto_reindex.py         # Automatic index rebuild scheduler
-│   └── vector_indexer.py       # Unified indexer with auto-optimization
-├── utils/                       # Algorithms & utilities
+│   ├── vector_indexer.py       # Unified indexer with auto-optimization
+│   ├── search_engine_service.py# Hybrid query planning endpoint
+│   ├── distributed_coordinator.py  # Scatter-gather query aggregation
+│   ├── gnn_service.py          # GCN training, temporal dynamics, link prediction
+│   ├── raft_coordinator.py     # Raft consensus + multi-node registry
+│   ├── cdc_connector.py        # Kafka/Debezium streaming ingestion
+│   ├── mcp_server.py           # Model Context Protocol server
+│   ├── ltr_service.py          # XGBoost LambdaMART learning-to-rank
+│   ├── personalization_service.py  # User-profile preference learning
+│   ├── realtime_connector.py   # Web crawler, RSS, REST live connectors
+│   ├── startup_recovery.py     # Auto-replay pending WALs on boot
+│   └── backup_service.py       # WAL snapshot backup & restore
+├── utils/                       # Algorithms & utilities (42 modules)
 │   ├── hnsw_index.py           # HNSW graph (Node, search, insert, save/load, tombstone delete/compact)
 │   ├── wal.py                  # Write-Ahead Log: durability, checkpoint, crash-recovery replay
 │   ├── compaction.py           # Background tombstone compaction daemon
@@ -969,6 +1147,7 @@ pytest test/ --cov=. --cov-report=html
 │   ├── query_planner.py        # AST hybrid query parser + cost-based optimizer
 │   ├── rbac.py                 # Row-level RBAC (permission gates + metadata predicates)
 │   ├── dynamic_quantization.py # Memory-pressure precision policy (fp32→int8→pq→binary)
+│   ├── vamana_index.py         # DiskANN/Vamana SSD-optimized on-disk graph
 │   ├── ivf_index.py            # IVF + coarse/fine quantizers
 │   ├── product_quantization.py # PQ index with ADC
 │   ├── int8_index.py           # Int8 quantization (4x compression)
@@ -981,17 +1160,29 @@ pytest test/ --cov=. --cov-report=html
 │   ├── clustering.py           # K-Means++ implementation
 │   ├── distance.py             # Euclidean & cosine distance functions
 │   ├── optimization.py         # Numba JIT, batch processing, memory optimization
-│   ├── benchmark.py            # Comprehensive benchmark suite
+│   ├── gpu_indexing.py         # Full CuPy index construction (k-means, HNSW, PQ)
 │   ├── gpu_kernels.py          # CuPy GPU distance computation
+│   ├── simd_kernels.py         # Auto-detecting SIMD/AVX-512 distance kernels
+│   ├── benchmark.py            # Comprehensive benchmark suite
+│   ├── encryption.py           # AES-256-GCM encryption of index files / mmap store
+│   ├── audit_log.py            # Immutable append-only mutation log with tamper detection
+│   ├── pii_redaction.py        # Field-level and pattern-based PII redaction
+│   ├── mtls_service.py         # Mutual TLS certificate generation and verification
+│   ├── opentelemetry_tracing.py# Distributed tracing spans across API→service→index→DB
+│   ├── index_health.py         # Recall drift, tombstone ratio, fragmentation monitoring
+│   ├── llama_index_adapter.py  # LlamaIndex vector store adapter
 │   ├── pdf_processor.py        # PyMuPDF text extraction
 │   ├── document_processor.py   # Multi-format (DOCX, HTML, MD, TXT) extraction
 │   ├── text_chunker.py         # Recursive, sentence, & token chunking
 │   ├── image_metadata.py       # EXIF/metadata extraction from images
 │   ├── metadata_contract.py    # Collection metadata building
+│   ├── filtered_search.py      # Filtered HNSW search with metadata predicates
 │   ├── index_paths.py          # File path helpers for index save/load
-│   └── index_serializer.py     # JSON/binary serialization
-├── sdk/                         # Python client SDK
-│   ├── vector_db_client/       # Client package
+│   ├── index_serializer.py     # JSON/binary serialization
+│   ├── rag_eval.py             # RAG evaluation metrics (precision, recall, MRR, NDCG)
+│   └── telemetry.py            # Performance instrumentation and metrics collection
+├── sdk/                         # Client SDKs
+│   ├── vector_db_client/       # Python client package
 │   │   ├── client.py          # Main VectorDBClient
 │   │   ├── collections.py     # CollectionsAPI
 │   │   ├── vectors.py         # VectorsAPI
@@ -1000,8 +1191,34 @@ pytest test/ --cov=. --cov-report=html
 │   │   ├── exceptions.py      # Custom exceptions
 │   │   ├── langchain_vectorstore.py  # LangChain integration
 │   │   └── _http.py           # HTTP transport layer
-│   └── tests/                  # SDK test suite
-├── test/                        # Server test suite (130+ tests)
+│   ├── go/                    # Go SDK (64 tests)
+│   │   ├── vectordb/          # Client package
+│   │   │   ├── client.go      # VectorDBClient
+│   │   │   ├── collections.go # CollectionsAPI
+│   │   │   ├── vectors.go     # VectorsAPI
+│   │   │   ├── multimodal.go  # MultimodalAPI
+│   │   │   ├── models.go      # Response models
+│   │   │   ├── errors.go      # Custom errors
+│   │   │   └── http.go        # HTTP transport
+│   │   ├── go.mod
+│   │   └── README.md
+│   ├── typescript/             # TypeScript SDK (91 tests)
+│   │   ├── src/               # Source
+│   │   │   ├── client.ts      # VectorDBClient
+│   │   │   ├── collections.ts # CollectionsAPI
+│   │   │   ├── vectors.ts     # VectorsAPI
+│   │   │   ├── multimodal.ts  # MultimodalAPI
+│   │   │   ├── models.ts      # Response models
+│   │   │   ├── errors.ts      # Custom errors
+│   │   │   ├── http.ts        # HTTP transport
+│   │   │   └── index.ts       # Public exports
+│   │   ├── test/              # 91 tests (unit + integration + edge cases)
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── COMPATIBILITY.md        # SDK feature comparison matrix
+│   ├── client.py               # Async Python client
+│   └── tests/                  # Python SDK tests
+├── test/                        # Server test suite (660+ tests, 52 files)
 ├── scripts/                     # Utility scripts
 │   ├── run_benchmark.py        # Comprehensive benchmark runner
 │   ├── scale_benchmark.py      # Scale benchmark (1K–1M vectors)
@@ -1086,58 +1303,24 @@ See [SECURITY.md](SECURITY.md) for the full security policy.
 
 ## Roadmap
 
-### Implemented
-- [x] HNSW index with configurable parameters (m, ef_construction, ef_search)
-- [x] IVF index with coarse+fine quantization
-- [x] KD-Tree, VP-Tree, LSH indexes
-- [x] Product Quantization (10-48x compression)
-- [x] Hybrid search (dense + BM25 via RRF)
-- [x] Cross-encoder re-ranking (local + Cohere API)
-- [x] Multimodal ingestion (text, image, audio)
-- [x] RAG pipeline with PDF/document processing
-- [x] Streaming RAG (SSE)
-- [x] 68 REST API endpoints + gRPC + WebSocket
-- [x] Multi-tenancy with API key auth
-- [x] Per-collection HNSW/IVF indexes
-- [x] OpenAI-compatible endpoints
-- [x] Prometheus metrics + dashboard UI
-- [x] GPU-accelerated distance (CuPy)
-- [x] Redis caching
-- [x] Docker Compose + Kubernetes Helm chart
-- [x] AWS + Azure Terraform templates
-- [x] 112+ tests
-- [x] Python SDK + LangChain integration
+All 9 roadmap phases are **fully implemented**. See [ROADMAP.md](ROADMAP.md) for the complete Phase 10–14 plans.
 
-### Completed (Latest)
-- [x] **Write-Ahead Logging (WAL)** with fsync durability + crash-recovery replay (`utils/wal.py`)
-- [x] **Background compaction** — HNSW tombstone soft-delete + daemon reclaim thread (`utils/compaction.py`)
-- [x] **Memory-mapped vector storage** for larger-than-RAM datasets (`utils/mmap_store.py`)
-- [x] **AST query planner + cost-based optimizer** for hybrid queries (`utils/query_planner.py`) + `/search-engine/hybrid-query` REST endpoint
-- [x] **Row-level RBAC** — operation gates + per-key metadata predicates (`utils/rbac.py`)
-- [x] **Distributed query aggregation** — parallel scatter-gather coordinator with global fusion + fault tolerance (`services/distributed_coordinator.py`)
-- [x] **Dynamic quantization policy** — memory-pressure precision tiers (`utils/dynamic_quantization.py`)
-- [x] **Startup crash recovery** — auto-replay pending WALs (HNSW + IVF) on boot (`services/startup_recovery.py`)
-- [x] Per-collection IVF index persistence (save/load/rebuild + REST endpoints)
-- [x] Cross-modal CLIP text→image search quality tuning (temperature + normalization)
-- [x] Long-audio chunking and segment-level vectors (`chunk_seconds` param)
-- [x] S3/Azure Blob media storage (wired into MediaStore via StorageBackend)
-- [x] Async ingest job queue for large uploads (REST API + periodic flush)
-- [x] SQL/metadata filters (JSONB) with pre-filtering (`MetadataFilter.pre_filter`)
-- [x] Int8 vector quantization (4x compression, `utils/int8_index.py`)
-- [x] Time-series vector support (timestamp/series_id schema + 5 API endpoints)
-- [x] GraphQL API (Strawberry, mounted at `/graphql`)
-- [x] Distributed/partitioned indexes (`utils/partitioned_index.py`)
-
-### Upcoming (See [ROADMAP.md](ROADMAP.md))
-- [ ] Phase 1 (finish): DiskANN/Vamana on-disk graph layout; auto-replay all WALs on startup
-- [ ] Phase 2: Horizontal sharding, distributed query aggregation, Raft consensus
-- [ ] Phase 3: CDC ingestion (Kafka/Debezium), dynamic quantization, LlamaIndex + MCP connectors
-- [ ] Phase 4 (finish): Row-level RBAC; query planner exposed over REST with live cardinality stats
-- [ ] Phase 5: SIMD/AVX-512 distance kernels; full GPU index construction
-- [ ] Phase 6: GCN node-embedding training, temporal graph dynamics, link prediction
-- [ ] Phase 7: Learning-to-Rank, personalization, real-time web connectors
-- [ ] Phase 8 (new): Distributed tracing, backup/restore, index auto-tuning
-- [ ] Phase 9 (new): Encryption at rest, audit logging, mTLS, data residency
+| Phase | Theme | Status |
+|-------|-------|--------|
+| 1 | Storage & Durability (WAL, mmap, compaction, Vamana, startup recovery) | ✅ Done |
+| 2 | Distributed Systems (Raft, sharding, scatter-gather query aggregation) | ✅ Done |
+| 3 | Advanced Ingestion (CDC Kafka, dynamic quantization, LlamaIndex, MCP) | ✅ Done |
+| 4 | Query Planner (AST parser, cost-based optimizer, RBAC, REST endpoint) | ✅ Done |
+| 5 | Hardware Acceleration (GPU indexing, SIMD/AVX-512 kernels) | ✅ Done |
+| 6 | Graph Neural Networks (GCN training, temporal dynamics, link prediction) | ✅ Done |
+| 7 | Production Search (LTR, personalization, real-time connectors) | ✅ Done |
+| 8 | Observability (OpenTelemetry tracing, backup/restore, index health) | ✅ Done |
+| 9 | Security & Compliance (encryption, audit, PII, mTLS) | ✅ Done |
+| 10 | AI-Native & Intelligent Search | ⚪ Planned |
+| 11 | Performance at Scale (billion-scale benchmarks, tiered storage) | ⚪ Planned |
+| 12 | Enterprise & Compliance (multi-region, SOC2, data retention) | ⚪ Planned |
+| 13 | Ecosystem & Integrations (JS/TS/Go/Java/Rust SDKs, Arrow Flight) | ⚪ Planned |
+| 14 | Real-Time & Streaming (continuous queries, webhooks, CDC expansion) | ⚪ Planned |
 
 
 ## License

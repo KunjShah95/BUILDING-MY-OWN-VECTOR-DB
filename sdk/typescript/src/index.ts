@@ -1,0 +1,11 @@
+export { VectorDBClient } from "./client";
+export type { ClientOptions } from "./client";
+export { VectorDBError, VectorDBHTTPError } from "./errors";
+export { Collection, SearchHit, SearchResult } from "./models";
+export type { CollectionData, SearchHitData, SearchResultData } from "./models";
+export { CollectionsAPI } from "./collections";
+export type { CreateCollectionParams } from "./collections";
+export { VectorsAPI } from "./vectors";
+export type { CreateVectorParams, SearchVectorsParams } from "./vectors";
+export { MultimodalAPI } from "./multimodal";
+export type { IngestTextParams, IngestFileParams, SearchTextParams, SearchFileParams } from "./multimodal";

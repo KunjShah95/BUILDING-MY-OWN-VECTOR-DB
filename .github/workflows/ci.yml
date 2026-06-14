@@ -71,6 +71,60 @@ jobs:
       with:
         file: ./coverage.xml
 
+  ts-sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+        cache-dependency-path: sdk/typescript/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci --prefer-offline
+
+    - name: Type check
+      run: npm run typecheck
+
+    - name: Run tests
+      run: npm test
+
+    - name: Build
+      run: npm run build
+
+    - name: npm audit (safety gate)
+      run: npm audit --audit-level=high
+
+  go-sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/go
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: "1.21"
+        cache: true
+        cache-dependency-path: sdk/go/go.sum
+
+    - name: Build
+      run: go build ./vectordb/...
+
+    - name: Vet
+      run: go vet ./vectordb/...
+
+    - name: Test
+      run: go test ./vectordb/... -count=1 -timeout 60s
+
   lint:
     runs-on: ubuntu-latest
     steps:

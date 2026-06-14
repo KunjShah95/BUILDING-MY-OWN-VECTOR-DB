@@ -8,19 +8,19 @@ This roadmap tracks the evolution of this project from a robust, single-node vec
 
 | Phase | Theme | Status |
 |-------|-------|--------|
-| 1 | Storage & Durability | ✅ done (HNSW+IVF WAL recovery, startup replay; DiskANN graph pending) |
-| 2 | Distributed Systems & Scalability | 🟡 partial (parallel scatter-gather coordinator done; Raft pending) |
-| 3 | Advanced Ingestion & Integrations | 🟡 partial (dynamic quantization policy added) |
+| 1 | Storage & Durability | ✅ done (HNSW+IVF WAL recovery, startup replay, DiskANN/Vamana graph built) |
+| 2 | Distributed Systems & Scalability | ✅ done (Raft consensus, multi-node registry, scatter-gather coordinator) |
+| 3 | Advanced Ingestion & Integrations | ✅ done (CDC Kafka, auto-quantization, LlamaIndex, MCP server) |
 | 4 | Query Planner & Optimization | ✅ done (planner + REST endpoint + row-level RBAC) |
-| 5 | Hardware Acceleration | 🟡 partial (GPU batch distance) |
-| 6 | Graph Neural Networks | 🟡 partial (graph rerank only) |
-| 7 | Production Search Orchestration | ⚪ planned |
-| 8 | Observability & Operations | ⚪ planned (new) |
-| 9 | Security & Compliance | 🟡 partial (RBAC row-level security) |
+| 5 | Hardware Acceleration | ✅ done (GPU indexing, SIMD/AVX-512 kernels) |
+| 6 | Graph Neural Networks | ✅ done (GCN training, temporal dynamics, link prediction) |
+| 7 | Production Search Orchestration | ✅ done (LTR, personalization engine, real-time connectors) |
+| 8 | Observability & Operations | ✅ done (OpenTelemetry tracing, backup/restore, graceful shutdown) |
+| 9 | Security & Compliance | ✅ done (RBAC enforcement, encryption, audit logging, PII, mTLS) |
 
 ---
 
-## Phase 1: Storage & Durability ✅ (Core Done)
+## Phase 1: Storage & Durability ✅
 Survive crashes without data loss and manage datasets larger than available RAM.
 
 - ✅ **Write-Ahead Logging (WAL)**: Append-only log with fsync durability, checkpoint/truncate after snapshot, and crash-recovery replay wired into HNSW index load (`utils/wal.py`, `database/hnsw_database.py`).
@@ -28,80 +28,111 @@ Survive crashes without data loss and manage datasets larger than available RAM.
 - ✅ **Background Compaction**: Soft-delete tombstones in HNSW preserve graph connectivity; a daemon thread hard-removes them by interval/ratio threshold (`utils/compaction.py`, `HNSWIndex.compact`).
 - ✅ **IVF WAL Recovery**: WAL replay wired into IVF index load via method-agnostic replay (`add`/`delete_vector` fallback) (`database/ivf_database.py`, `utils/wal.py`).
 - ✅ **Startup Auto-Recovery**: On app boot, every collection with a pending WAL + persisted index is replayed automatically (`services/startup_recovery.py`, FastAPI `startup` hook in `api/main.py`).
-- ⚪ **DiskANN / Vamana Graph Layout**: SSD-optimized on-disk graph (beam search over memory-mapped adjacency) for billion-scale serving. _Remaining work._
+- ✅ **DiskANN / Vamana Graph Layout**: SSD-optimized on-disk graph (beam search over memory-mapped adjacency) for billion-scale serving (`utils/vamana_index.py`).
 
-**Next up here:** integrate `MmapVectorStore` as the backing store for HNSW vectors; build the Vamana on-disk graph.
-
-## Phase 2: Distributed Systems & Scalability ⚪
+## Phase 2: Distributed Systems & Scalability ✅
 A single node has physical limits. We need horizontal scalability.
 
-- 🟡 **Horizontal Sharding**: Consistent hashing to shard collections across nodes. _Foundation: `utils/partitioned_index.py` does hash/range partitioning; multi-node placement remains._
-- ✅ **Distributed Query Aggregation**: Coordinator scatter-gathers queries to shards **in parallel** (thread pool), fuses global top-K by distance or RRF, and tolerates shard failure (`degraded` flag). Pluggable `Shard` protocol drives in-process or remote shards (`services/distributed_coordinator.py`).
-- ⚪ **Raft Consensus Engine**: Leader election + distributed WAL replication (e.g. `pysyncobj`) for high availability. _Builds directly on the Phase 1 WAL._
+- ✅ **Horizontal Sharding**: Consistent hashing to shard collections across nodes (`utils/partitioned_index.py`). Multi-node placement via `ClusterRegistry` (`services/raft_coordinator.py`). 
+- ✅ **Distributed Query Aggregation**: Coordinator scatter-gathers queries to shards in parallel, fuses global top-K by distance or RRF, and tolerates shard failure (`services/distributed_coordinator.py`).
+- ✅ **Raft Consensus Engine**: Leader election + distributed WAL replication with ClusterRegistry for high availability (`services/raft_coordinator.py`).
 
-## Phase 3: Advanced Ingestion & Integrations 🟡
+## Phase 3: Advanced Ingestion & Integrations ✅
 Production environments demand seamless data pipelines, not just REST APIs.
 
-- ⚪ **Change Data Capture (CDC)**: Kafka/Debezium integration for real-time streaming ingestion from upstream databases.
-- 🟡 **Dynamic Quantization**: Memory-pressure / budget-driven precision policy picks fp32 → Int8 → PQ → Binary and can materialize Int8/Binary encodings (`utils/dynamic_quantization.py`). _Auto-apply hook into live indexes under runtime pressure remains._
-- 🟡 **Agentic Connectors**: LangChain VectorStore done (`sdk/.../langchain_vectorstore.py`). LlamaIndex adapter and an MCP server remain.
+- ✅ **Change Data Capture (CDC)**: Kafka/Debezium integration for real-time streaming ingestion from upstream databases (`services/cdc_connector.py`).
+- ✅ **Dynamic Quantization**: Memory-pressure/budget-driven precision policy + background QuantizationMonitor that auto-applies Int8/PQ/Binary under real memory pressure (`utils/dynamic_quantization.py`, `services/auto_reindex.py`).
+- ✅ **Agentic Connectors**: LangChain VectorStore (`sdk/...`), LlamaIndex adapter (`utils/llama_index_adapter.py`), MCP server (`services/mcp_server.py`).
 - ✅ **Async Ingestion Queue**: In-memory batched queue with periodic flush + REST API (`services/ingestion_service.py`).
 
-## Phase 4: Query Planner & Optimization ✅ (Planner Done)
+## Phase 4: Query Planner & Optimization ✅
 Move from static search pipelines to intelligent, cost-based execution.
 
-- ✅ **AST-Based Query Planner**: Recursive-descent parser turns hybrid queries like `(category = 'tech' AND price < 100) OR semantic_match("laptops")` into a typed AST (`utils/query_planner.py`).
-- ✅ **Cost-Based Optimizer**: Selectivity heuristics (with optional per-field cardinality stats) pick `filter_first` / `vector_first` / `filter_only` / `vector_only`, exposed via `SearchEngineService.planned_search`.
-- ✅ **REST Endpoint**: `/search-engine/hybrid-query` accepts the query DSL, embeds the `semantic_match()` text, and runs the cost-based plan (`api/main.py`).
-- ✅ **Role-Based Access Control (RBAC)**: Operation gates (read/write/delete/admin) + row-level metadata predicates compiled from the same DSL, usable as a search `metadata_filter` or result filter (`utils/rbac.py`). Forward-compatible with an API-key `row_filter` field.
+- ✅ **AST-Based Query Planner**: Recursive-descent parser for hybrid queries (`utils/query_planner.py`).
+- ✅ **Cost-Based Optimizer**: Selectivity heuristics with optional per-field cardinality stats (`utils/query_planner.py`).
+- ✅ **REST Endpoint**: `/search-engine/hybrid-query` endpoint (`api/main.py`).
+- ✅ **Row-Level RBAC**: Operation gates + row-level metadata predicates (`utils/rbac.py`). Persisted `row_filter` on API-key records and enforced in auth middleware (`services/auth_service.py`, `api/middleware/auth_middleware.py`).
 
-**Next up here:** collect live per-field cardinality stats from PostgreSQL to feed the optimizer; persist `row_filter` on the API-key record and enforce in auth middleware.
+## Phase 5: Hardware Acceleration ✅
+- ✅ **GPU Indexing**: Full CuPy index construction (k-means, batch distance, HNSW neighbor selection, PQ training) via `utils/gpu_indexing.py`.
+- ✅ **SIMD/AVX-512 Optimization**: Auto-detecting SIMD kernels with Numba JIT and C++/PyBind11 backend support (`utils/simd_kernels.py`).
 
-## Phase 5: Hardware Acceleration 🟡
-- 🟡 **GPU Indexing**: CuPy batch distance kernels exist (`utils/gpu_kernels.py`). Offload full index construction next (RAPIDS cuVS style).
-- ⚪ **SIMD/AVX-512 Optimization**: Hand-optimized C++/Cython bindings (PyBind11) for inner-loop distance.
+## Phase 6: Graph Neural Networks ✅
+Apply ML directly over the HNSW/Vamana index structure.
 
-## Phase 6: Graph Neural Networks (GNN) 🟡
-Apply ML directly over the HNSW index structure.
+- ✅ **Graph Rerank**: Personalized PageRank-based candidate reranking (`services/gnn_service.py`).
+- ✅ **GCN Node-Embedding Training**: 2-layer Graph Convolutional Network for learning low-dimensional node embeddings with self-supervised link prediction loss (`services/gnn_service.py`).
+- ✅ **Temporal Graph Dynamics**: Track edge formation over time to surface trending/bursty clusters (`services/gnn_service.py`).
+- ✅ **Link Prediction**: Infer missing metadata tags by predicting edges between similar sub-graphs (`services/gnn_service.py`).
 
-- 🟡 **Graph Rerank**: `services/gnn_service.py` re-ranks candidates over the graph. Full **GCN** node-embedding training remains.
-- ⚪ **Temporal Graph Dynamics**: Track edge formations over time to surface trending/bursty clusters. _Foundation: time-series vectors already exist._
-- ⚪ **Link Prediction**: Infer missing metadata tags by predicting edges between semantically similar sub-graphs.
-
-## Phase 7: Production Search Orchestration ⚪
+## Phase 7: Production Search Orchestration ✅
 Build a deployment-ready search orchestrator on top of the vector foundation.
 
-- ⚪ **Learning-to-Rank (LTR)**: Replace static RRF with XGBoost/LightGBM trained on click-through feedback. _Foundation: `/playground/feedback` already captures signals._
-- ⚪ **Personalization Engine**: Inject user-profile embeddings into query formulation.
-- ⚪ **Real-Time Data Connectors**: Built-in crawlers / headless-browser ingestion of live web data.
+- ✅ **Learning-to-Rank (LTR)**: XGBoost LambdaMART trained on click-through feedback to replace static RRF (`services/ltr_service.py`).
+- ✅ **Personalization Engine**: Inject user-profile embeddings into query formulation with preference learning from interaction history (`services/personalization_service.py`).
+- ✅ **Real-Time Data Connectors**: Web crawler, RSS feed, and REST API connectors for live data ingestion (`services/realtime_connector.py`).
 
-## Phase 8: Observability & Operations ⚪ (New)
+## Phase 8: Observability & Operations ✅
 Make the system debuggable and operable at scale.
 
-- ⚪ **Distributed Tracing**: OpenTelemetry spans across API → service → index → DB (extends existing `utils/telemetry.py`).
-- ⚪ **Index Health & Auto-Tuning**: Surface recall drift, tombstone ratio, and fragmentation; auto-trigger compaction/reindex (extends `services/auto_reindex.py`).
-- ⚪ **Backup & Restore**: Point-in-time recovery from WAL + snapshot; scheduled S3/Azure backups of index files.
-- ⚪ **Graceful Shutdown / Startup Recovery**: On boot, replay all collection WALs and rebuild in-memory indexes automatically.
+- ✅ **Distributed Tracing**: OpenTelemetry spans across API → service → index → DB with automatic decorators and context managers (`utils/opentelemetry_tracing.py`, extends `utils/telemetry.py`).
+- ✅ **Index Health & Auto-Tuning**: Surface recall drift, tombstone ratio, and fragmentation; auto-trigger compaction/reindex (`utils/index_health.py`, `services/auto_reindex.py`).
+- ✅ **Backup & Restore**: Point-in-time recovery from WAL + snapshot; scheduled S3/Azure backups of index files (`services/backup_service.py`).
+- ✅ **Graceful Shutdown / Startup Recovery**: On boot, replay all collection WALs and rebuild in-memory indexes automatically (`services/startup_recovery.py`).
 
-## Phase 9: Security & Compliance 🟡 (New)
+## Phase 9: Security & Compliance ✅
 Enterprise readiness.
 
-- 🟡 **Row-Level Security**: RBAC policy with per-key row predicates + operation gates (`utils/rbac.py`). Middleware enforcement + key-record persistence remain.
-- ⚪ **Encryption at Rest**: Encrypt index files and mmap store on disk.
-- ⚪ **Audit Logging**: Immutable log of every mutation and access for compliance.
-- ⚪ **PII Redaction & Data Residency**: Per-tenant region pinning and field-level redaction in metadata.
-- ⚪ **mTLS between nodes**: Secure inter-node traffic once sharding lands (Phase 2).
+- ✅ **Row-Level Security**: RBAC policy with per-key `row_filter` predicates persisted in database + operation gates enforced in auth middleware (`utils/rbac.py`, `database/schema.py`, `services/auth_service.py`, `api/middleware/auth_middleware.py`).
+- ✅ **Encryption at Rest**: AES-256-GCM encryption of index files and mmap store on disk with key derivation and rotation support (`utils/encryption.py`).
+- ✅ **Audit Logging**: Immutable append-only log of every mutation and access for compliance with tamper detection (`utils/audit_log.py`).
+- ✅ **PII Redaction & Data Residency**: Field-level and pattern-based PII redaction in metadata, per-tenant region pinning (`utils/pii_redaction.py`).
+- ✅ **mTLS between nodes**: Mutual TLS with auto-generated dev certificates for secure inter-node communication (`utils/mtls_service.py`).
 
 ---
 
-## Recommended Next Sprint
+## Phase 10: AI-Native & Intelligent Search ⚪
+Move beyond fixed index parameters to self-optimizing, natural-language-driven retrieval.
 
-Recently completed: Phase 1 durability loop (IVF WAL + startup replay), query-planner REST endpoint, row-level RBAC, parallel distributed query aggregation.
+- ⚪ **AI-powered index tuning**: Automated HNSW M/ef construction, IVF cluster count, and PQ sub-quantizer recommendations based on dataset statistics and query pattern analysis.
+- ⚪ **Natural language query interface**: Text-to-vector-search — translate plain English queries into structured hybrid queries (semantic + metadata filters + time ranges).
+- ⚪ **Automatic metadata enrichment**: On ingestion, auto-extract entities, topics, and summaries from text/image content to populate metadata fields for filtering.
+- ⚪ **Embedding model lifecycle**: Registry with versioning, A/B testing between models, and gradual re-indexing when switching encoders.
+- ⚪ **Multi-vector per document**: ColBERT-style late interaction scoring — store multiple vectors per document and compute MaxSim at query time for finer-grained relevance.
 
-Highest-leverage work remaining, ordered:
+## Phase 11: Performance at Scale ⚪
+Target benchmarks at 100M–1B vectors while keeping recall >95% and latency <10ms.
 
-1. **Persist + enforce RBAC** — add a `row_filter` column to the API-key record and apply `RBACPolicy.metadata_filter()` inside the auth middleware / search path so row-level security is enforced end-to-end.
-2. **Live cardinality stats for the optimizer** — feed per-field `distinct` counts from PostgreSQL into `plan_query(stats=...)` so selectivity estimates are data-driven, not heuristic.
-3. **Auto-apply dynamic quantization** — a background monitor that triggers `QuantizationPolicy` under real memory pressure and swaps live indexes to Int8/PQ.
-4. **Raft / multi-node placement** (Phase 2) — turn the in-process coordinator into a true multi-node cluster with WAL replication and leader election.
-5. **DiskANN / Vamana on-disk graph** (Phase 1) — billion-scale serving on SSD using the existing `MmapVectorStore`.
+- ⚪ **Billion-scale benchmark optimization**: Tune Vamana/DiskANN parameters (L, R, beam width) on 100M–1B scale datasets (BIGANN, SPACEV, DEEP1B) with quantified recall/latency tradeoffs.
+- ⚪ **Tiered storage**: Hot (RAM/mmap), warm (NVMe/SSD), cold (S3/Blob) vector tiers with automatic promotion/demotion based on access frequency.
+- ⚪ **Adaptive index selection**: Per-query routing to the fastest index (HNSW/IVF/PQ/brute-force) based on query cardinality, filter selectivity, and latency budget.
+- ⚪ **Query result caching**: Multi-level cache (L1 in-memory, L2 Redis) with TTL-based invalidation and popularity-aware pre-warming.
+- ⚪ **High-concurrency connection pooling**: Multiplexed gRPC connections, connection pooling for PostgreSQL, and async I/O tuning for 10K+ concurrent queries.
+
+## Phase 12: Enterprise & Compliance ⚪
+Production-hardening for regulated industries.
+
+- ⚪ **Multi-region active-active replication**: CRDT-based vector synchronization across geographic regions with conflict resolution and local consistency guarantees.
+- ⚪ **Compliance reporting (SOC2, GDPR)**: Automated audit report generation from audit logs, data residency attestation, and right-to-erasure workflows.
+- ⚪ **Cost-based query budget enforcement**: Prevent runaway queries by capping max scanning (max probes, max ef_search, max HNSW visits) per API key/tenant.
+- ⚪ **Data retention & lifecycle policies**: TTL-based vector expiration, tiered archival (hot → warm → cold → delete), and automated garbage collection.
+- ⚪ **Tenant-level isolation certification**: Separate database schemas, dedicated index files, and CPU/memory cgroups per tenant for true hardware-level isolation.
+
+## Phase 13: Ecosystem & Integrations ⚪
+Extend beyond Python into the broader developer ecosystem.
+
+- ⚪ **Client SDKs — JS/TS, Go, Java, Rust, .NET**: Idiomatic clients for each language covering full API surface (CRUD, search, hybrid, RAG, admin).
+- ⚪ **Apache Arrow / Flight integration**: Zero-copy vector transfer via Arrow Flight for high-throughput data loading and export between ML pipelines.
+- ⚪ **Haystack integration**: Custom component for Haystack 2.x document store and embedding retrieval.
+- ⚪ **Semantic Kernel integration**: Memory store connector for Microsoft Semantic Kernel vector memory.
+- ⚪ **Vector benchmark suite**: Automated ANN benchmark harness (Bees-Balls, recall@k, throughput vs. build time) for regression testing index changes.
+- ⚪ **Plugin / extension system**: Hot-loadable custom index algorithms, embedding models, and storage backends via a registry interface.
+
+## Phase 14: Real-Time & Streaming ⚪
+Continuous data and query processing for time-sensitive applications.
+
+- ⚪ **Real-time index updates without blocking reads**: Lock-free concurrent index writes (HNSW/IVF) so ingestion never blocks search queries.
+- ⚪ **Streaming vector search (continuous query)**: Long-lived query subscriptions that emit new results as vectors are ingested — push-based retrieval.
+- ⚪ **Event-driven webhook notifications**: On vector insert/update/delete matching a registered query, fire a webhook with the result payload.
+- ⚪ **Materialized views for common queries**: Pre-compute and incrementally maintain result sets for high-frequency queries (trending, popular, recent).
+- ⚪ **Additional CDC sources**: PostgreSQL logical replication and MongoDB change streams as additional ingestion pipelines alongside Kafka.

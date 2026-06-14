@@ -10,6 +10,8 @@ import numpy as np
 
 from services.vector_indexer import VectorIndexer, VectorIndexerConfig, IndexMethod
 from utils.optimization import QueryOptimizer
+from utils.index_tuning import DatasetAnalyzer, HNSWParameterRecommender
+import numpy as np
 
 # ============================================================================
 # Pydantic Models
@@ -52,9 +54,36 @@ class BatchSearchModel(BaseModel):
 
 
 class ParameterSuggestionModel(BaseModel):
-    """Parameter suggestion model"""
+    """Parameter suggestion model (size-based heuristics)"""
     database_size: int = Field(ge=100, description="Number of vectors")
     recall_target: float = Field(default=0.95, ge=0.5, le=1.0)
+
+
+class SuggestParamsRequest(BaseModel):
+    """
+    Request model for data-driven index parameter suggestions.
+
+    When ``vectors`` are provided, the DatasetAnalyzer + HNSWParameterRecommender
+    pipeline runs a full analysis of the vector distribution (intrinsic
+    dimensionality, cluster structure, variance, etc.) and returns tailored
+    HNSW parameters with confidence and reasoning.
+
+    When ``vectors`` is omitted, falls back to size-based heuristic defaults.
+    """
+    vectors: Optional[List[List[float]]] = Field(
+        None,
+        description="Sample vectors for data-driven analysis. "
+        "At least 10 vectors recommended; up to 1000 are sub-sampled.",
+    )
+    num_vectors: Optional[int] = Field(
+        None, ge=1, description="Expected vector count (fallback when vectors not provided)"
+    )
+    vector_dim: Optional[int] = Field(
+        None, ge=1, description="Vector dimension (fallback when vectors not provided)"
+    )
+    recall_target: float = Field(
+        default=0.95, ge=0.0, le=2.0, description="Target recall@10 (clamped to 0.7-0.999 internally)"
+    )
 
 
 # ============================================================================
@@ -255,7 +284,7 @@ async def load_index(path: str = Query(description="Index path")) -> Dict[str, A
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/parameters/suggest", summary="Suggest optimal parameters")
+@router.post("/parameters/suggest", summary="Suggest optimal parameters (size-based heuristics)")
 async def suggest_parameters(suggestion: ParameterSuggestionModel) -> Dict[str, Any]:
     """
     Get suggested parameters based on dataset size
@@ -279,6 +308,86 @@ async def suggest_parameters(suggestion: ParameterSuggestionModel) -> Dict[str, 
             "recall_target": suggestion.recall_target,
             "suggestions": suggestions
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/suggest-params", summary="Data-driven index parameter suggestions via DatasetAnalyzer")
+async def suggest_params(request: SuggestParamsRequest) -> Dict[str, Any]:
+    """
+    Analyse sample vectors and return data-driven HNSW parameter recommendations.
+
+    Uses the DatasetAnalyzer to compute intrinsic dimensionality, cluster
+    structure, variance distribution, and norm statistics, then feeds the
+    results into HNSWParameterRecommender for a tailored recommendation with
+    confidence and reasoning.
+
+    **Request body:**
+
+    ```json
+    {
+      "vectors": [[0.1, 0.2, ...], [0.3, 0.4, ...], ...],
+      "recall_target": 0.95
+    }
+    ```
+
+    When ``vectors`` is provided, up to 1000 vectors are sub-sampled for
+    pairwise distance statistics (O(k·n) analysis cost).
+
+    When ``vectors`` is omitted, falls back to size-based heuristic defaults.
+
+    Returns:
+    - Dataset statistics summary
+    - Recommended HNSW parameters (M, M0, ef_construction, ef_search)
+    - Expected recall at the recommended ef_search
+    - Confidence level and human-readable reasoning
+    """
+    try:
+        if request.vectors and len(request.vectors) > 0:
+            # ---- Data-driven analysis --------------------------------------
+            vectors_np = np.array(request.vectors, dtype=np.float32)
+            n, d = vectors_np.shape
+
+            # Analyse vector distribution
+            sample_size = min(1000, n)
+            analyzer = DatasetAnalyzer(sample_size=sample_size)
+            stats = analyzer.analyze(vectors_np)
+
+            # Recommend parameters
+            recommender = HNSWParameterRecommender(
+                recall_target=request.recall_target
+            )
+            rec = recommender.recommend(stats)
+
+            return {
+                "success": True,
+                "mode": "data-driven",
+                "vectors_analysed": n,
+                "vector_dimension": d,
+                "sample_size": sample_size,
+                "dataset_stats": stats.summary,
+                "recommendation": rec.to_dict(),
+            }
+        else:
+            # ---- Fallback: size-based heuristics ---------------------------
+            n = request.num_vectors or 10000
+            suggestions = QueryOptimizer.suggest_index_parameters(
+                database_size=n,
+                recall_target=request.recall_target,
+            )
+
+            return {
+                "success": True,
+                "mode": "size-based",
+                "num_vectors": n,
+                "vector_dimension": request.vector_dim,
+                "recommendation": {
+                    "hnsw": suggestions.get("hnsw", {}),
+                    "ivf": suggestions.get("ivf", {}),
+                },
+                "note": "Provide sample vectors for a data-driven analysis "
+                "with confidence and reasoning.",
+            }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

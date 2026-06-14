@@ -21,6 +21,12 @@ from utils.optimization import (
     MemoryOptimizer,
     QueryOptimizer
 )
+from utils.index_tuning import (
+    DatasetAnalyzer,
+    HNSWParameterRecommender,
+    HNSWParameterRecommendation,
+    DatasetStatistics,
+)
 from config.settings import get_settings
 
 
@@ -39,7 +45,8 @@ class VectorIndexerConfig:
                  num_vectors: int = 10000,
                  vector_dim: int = 128,
                  recall_target: float = 0.95,
-                 speed_priority: bool = False):
+                 speed_priority: bool = False,
+                 auto_tune: bool = True):
         """
         Initialize indexer configuration
         
@@ -49,28 +56,67 @@ class VectorIndexerConfig:
             vector_dim: Vector dimensionality
             recall_target: Target recall for searches (0-1)
             speed_priority: If True, optimize for speed over accuracy
+            auto_tune: If True (default), analyse actual vectors on create_index()
+                to choose data-driven HNSW parameters via DatasetAnalyzer and
+                HNSWParameterRecommender, instead of using static settings defaults.
         """
         self.method = IndexMethod(method) if isinstance(method, str) else method
         self.num_vectors = num_vectors
         self.vector_dim = vector_dim
         self.recall_target = recall_target
         self.speed_priority = speed_priority
+        self.auto_tune = auto_tune
         
-        # Get optimized parameters
+        # Populated by tune() — always None until data-driven tuning is performed.
+        self.recommendation: Optional[HNSWParameterRecommendation] = None
+        self.dataset_stats: Optional[DatasetStatistics] = None
+        
+        # Get optimised parameters (overridden by tune() when vectors are supplied)
         self.hnsw_params = self._get_hnsw_params()
         self.ivf_params = self._get_ivf_params()
+
+    def tune(self, vectors: np.ndarray) -> None:
+        """
+        Analyse vector data and override HNSW parameters with data-driven
+        recommendations from DatasetAnalyzer / HNSWParameterRecommender.
+
+        Called automatically by create_index() when ``auto_tune=True`` (the
+        default), but can also be called manually before building an index.
+
+        Stores the full HNSWParameterRecommendation (including expected_recall,
+        confidence, reasoning) and DatasetStatistics on the config for
+        introspection via to_dict() and get_stats().
+
+        Args:
+            vectors: Shape (N, D) array of vectors.
+        """
+        # Analyse once, then recommend — avoids the double-analysis that would
+        # happen if we called the tune_hnsw convenience function separately.
+        sample_size = min(1000, len(vectors))
+        analyzer = DatasetAnalyzer(sample_size=sample_size)
+        self.dataset_stats = analyzer.analyze(vectors)
+        
+        recommender = HNSWParameterRecommender(recall_target=self.recall_target)
+        self.recommendation = recommender.recommend(self.dataset_stats)
+        
+        self.hnsw_params = {
+            "m": self.recommendation.m,
+            "m0": self.recommendation.m0,
+            "ef_construction": self.recommendation.ef_construction,
+            "ef_search": self.recommendation.ef_search,
+        }
+        self.num_vectors = len(vectors)
+        self.vector_dim = vectors.shape[1] if vectors.ndim > 1 else 0
     
     def _get_hnsw_params(self) -> Dict[str, int]:
-        """Get optimized HNSW parameters"""
+        """Get default HNSW parameters (used before tune() is called)."""
         settings = get_settings()
         
         if self.speed_priority:
-            # Optimize for speed
             m = max(8, settings.DEFAULT_M // 2)
             ef_construction = max(100, settings.DEFAULT_EF_CONSTRUCTION // 2)
             ef_search = 20
         else:
-            # Use default optimized values
             m = settings.DEFAULT_M
             ef_construction = settings.DEFAULT_EF_CONSTRUCTION
             ef_search = settings.DEFAULT_EF_SEARCH
@@ -83,7 +129,7 @@ class VectorIndexerConfig:
         }
     
     def _get_ivf_params(self) -> Dict[str, int]:
-        """Get optimized IVF parameters"""
+        """Get optimised IVF parameters"""
         settings = get_settings()
         n_clusters = min(int(np.sqrt(self.num_vectors)), 10000)
         n_probes = min(int(np.sqrt(self.num_vectors) / 10), 100)
@@ -97,16 +143,22 @@ class VectorIndexerConfig:
         }
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        return {
+        """Convert to dictionary, including recommendation metadata if available."""
+        result: Dict[str, Any] = {
             "method": self.method.value,
             "num_vectors": self.num_vectors,
             "vector_dim": self.vector_dim,
             "recall_target": self.recall_target,
             "speed_priority": self.speed_priority,
+            "auto_tune": self.auto_tune,
             "hnsw_params": self.hnsw_params,
-            "ivf_params": self.ivf_params
+            "ivf_params": self.ivf_params,
         }
+        if self.recommendation is not None:
+            result["recommendation"] = self.recommendation.to_dict()
+        if self.dataset_stats is not None:
+            result["dataset_stats"] = self.dataset_stats.summary
+        return result
 
 
 class VectorIndexer:
@@ -159,6 +211,10 @@ class VectorIndexer:
             start_time = time.time()
             vectors_array = np.array(vectors)
             self.vector_count = len(vectors)
+            
+            # Auto-tune parameters from actual data if enabled
+            if self.config.auto_tune and len(vectors_array) > 0:
+                self.config.tune(vectors_array)
             
             results = {
                 "success": True,

@@ -8,6 +8,7 @@ import logging
 from config.database import get_db
 from services.auth_service import APIKeyManager
 from services.tenant_service import TenantService
+from utils.rbac import policy_from_validation, Permission
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +70,41 @@ async def auth_middleware(request: Request, call_next: Callable):
 
         tenant_id = result.get("tenant_id")
 
-        # Attach tenant context to request state
+        # Build RBAC policy from the key record
+        from utils.rbac import policy_from_validation
+        rbac_policy = policy_from_validation(result)
+
+        # Attach tenant and RBAC context to request state
         request.state.api_key_info = result
         request.state.tenant_id = tenant_id
+        request.state.rbac_policy = rbac_policy  # available for endpoint enforcement
+
+        # ---- Operation-level RBAC check -------------------------------------
+        # Check write operations
+        write_methods = {"POST", "PUT", "PATCH"}
+        delete_methods = {"DELETE"}
+
+        if request.method in delete_methods and not rbac_policy.allows("delete"):
+            from utils.rbac import Permission
+            if not rbac_policy.allows(Permission.DELETE):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "message": "API key does not have delete permission",
+                    },
+                )
+
+        if request.method in write_methods:
+            from utils.rbac import Permission
+            if not rbac_policy.allows(Permission.WRITE):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "message": "API key does not have write permission",
+                    },
+                )
 
         # ---- Per-tenant rate limiting ---------------------------------------
         if tenant_id:

@@ -55,6 +55,10 @@ class ApiKey(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
+    # Row-level security filter (Phase 9): a metadata predicate DSL expression
+    # that restricts which rows this key can access, e.g.
+    # "department = 'eng' AND clearance < 3"
+    row_filter = Column(Text, nullable=True)
 
     __table_args__ = (
         Index("idx_api_keys_key_hash", "key_hash"),
@@ -73,6 +77,7 @@ class ApiKey(Base):
             "is_active": self.is_active,
             "created_at": self.created_at,
             "expires_at": self.expires_at,
+            "row_filter": self.row_filter,
         }
 
 
