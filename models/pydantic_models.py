@@ -16,6 +16,7 @@ class DistanceMetric(str, Enum):
     """Distance metric enumeration"""
     COSINE = "cosine"
     EUCLIDEAN = "euclidean"
+    DOT = "dot"
 
 class VectorCreate(BaseModel):
     """Model for creating a vector"""
@@ -577,4 +578,33 @@ class ComplianceReportRequest(BaseModel):
 class ComplianceReportResponse(BaseModel):
     success: bool
     report: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None
+
+
+# ── ANN index management (merged from ann-search-engine) ──────────────────────
+
+class AnnIndexType(str, Enum):
+    """Index types supported by AnnIndexService."""
+    HNSW = "hnsw"
+    IVF = "ivf"
+    BRUTE = "brute"
+
+
+class AnnIndexCreateRequest(BaseModel):
+    """Request body for POST /api/v1/ann/index."""
+    index_type: AnnIndexType = Field(..., description="Index type to build")
+    metric: DistanceMetric = Field(DistanceMetric.COSINE, description="Distance metric (brute force only)")
+    m: Optional[int] = Field(None, ge=1, le=256, description="HNSW: neighbors per node")
+    m0: Optional[int] = Field(None, ge=1, description="HNSW: layer-0 neighbors")
+    ef_construction: Optional[int] = Field(None, ge=1, description="HNSW: construction breadth")
+    n_clusters: Optional[int] = Field(None, ge=1, le=10000, description="IVF: cluster count")
+    n_probes: Optional[int] = Field(None, ge=1, description="IVF: clusters to probe at search time")
+
+
+class AnnIndexStatsResponse(BaseModel):
+    """Response for GET /api/v1/ann/index."""
+    success: bool
+    index_type: Optional[str] = None
+    stats: Optional[Dict[str, Any]] = None
+    indexes: Optional[Dict[str, Any]] = None
     message: Optional[str] = None

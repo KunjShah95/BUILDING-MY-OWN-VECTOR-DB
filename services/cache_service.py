@@ -133,3 +133,155 @@ class CacheService:
             }
         except Exception as e:
             return {"available": False, "error": str(e)}
+
+# =========================================================================
+# Async Cache Manager (Ported from ANN Search Engine)
+# =========================================================================
+import pickle
+from typing import Callable
+from functools import wraps
+
+class AsyncCacheManager:
+    """
+    Redis cache manager with serialization support (Async)
+    """
+    
+    def __init__(self):
+        self._redis = None
+        self._enabled = False
+        self._default_ttl = 300  # 5 minutes
+    
+    async def init(self, redis_url: str = None, enabled: bool = True):
+        """Initialize Redis connection"""
+        if not enabled:
+            self._enabled = False
+            logger.info("Async Cache is disabled")
+            return
+        
+        try:
+            import redis.asyncio as redis
+            self._redis = redis.from_url(redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+            await self._redis.ping()
+            self._enabled = True
+            logger.info("Async Redis cache initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize async Redis cache: {e}")
+            self._enabled = False
+            self._redis = None
+    
+    async def close(self):
+        """Close Redis connection"""
+        if self._redis:
+            await self._redis.close()
+            self._redis = None
+            logger.info("Async Redis cache connection closed")
+    
+    def _generate_key(self, prefix: str, *args, **kwargs) -> str:
+        """Generate cache key from arguments"""
+        key_data = f"{prefix}:{str(args)}:{str(sorted(kwargs.items()))}"
+        return hashlib.md5(key_data.encode()).hexdigest()
+    
+    async def get(self, key: str) -> Optional[Any]:
+        """Get value from cache"""
+        if not self._enabled or not self._redis:
+            return None
+        
+        try:
+            data = await self._redis.get(key)
+            if data:
+                return pickle.loads(data)
+            return None
+        except Exception as e:
+            logger.error(f"Async cache get error: {e}")
+            return None
+    
+    async def set(self, key: str, value: Any, ttl: int = None) -> bool:
+        """Set value in cache"""
+        if not self._enabled or not self._redis:
+            return False
+        
+        try:
+            serialized = pickle.dumps(value)
+            await self._redis.setex(key, ttl or self._default_ttl, serialized)
+            return True
+        except Exception as e:
+            logger.error(f"Async cache set error: {e}")
+            return False
+    
+    async def delete(self, key: str) -> bool:
+        """Delete value from cache"""
+        if not self._enabled or not self._redis:
+            return False
+        
+        try:
+            await self._redis.delete(key)
+            return True
+        except Exception as e:
+            logger.error(f"Async cache delete error: {e}")
+            return False
+    
+    async def delete_pattern(self, pattern: str) -> int:
+        """Delete keys matching pattern"""
+        if not self._enabled or not self._redis:
+            return 0
+        
+        try:
+            keys = await self._redis.keys(pattern)
+            if keys:
+                return await self._redis.delete(*keys)
+            return 0
+        except Exception as e:
+            logger.error(f"Async cache delete pattern error: {e}")
+            return 0
+
+
+# Global cache manager instance
+async_cache_manager = AsyncCacheManager()
+
+async def init_async_cache(redis_url: str = None, enabled: bool = True):
+    """Initialize global async cache"""
+    await async_cache_manager.init(redis_url, enabled)
+
+async def close_async_cache():
+    """Close global async cache"""
+    await async_cache_manager.close()
+
+def async_cached(prefix: str, ttl: int = 300):
+    """
+    Decorator to cache async function results
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            # Generate cache key
+            cache_key = async_cache_manager._generate_key(prefix, args, kwargs)
+            
+            # Try to get from cache
+            cached_value = await async_cache_manager.get(cache_key)
+            if cached_value is not None:
+                logger.debug(f"Cache hit for {prefix}")
+                return cached_value
+            
+            # Execute function
+            result = await func(*args, **kwargs)
+            
+            # Store in cache
+            await async_cache_manager.set(cache_key, result, ttl)
+            logger.debug(f"Cache set for {prefix}")
+            
+            return result
+        return async_wrapper
+    return decorator
+
+def invalidate_async_cache(pattern: str):
+    """
+    Decorator to invalidate cache after async function execution
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            result = await func(*args, **kwargs)
+            await async_cache_manager.delete_pattern(pattern)
+            return result
+        return async_wrapper
+    return decorator

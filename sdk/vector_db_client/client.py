@@ -2,6 +2,7 @@ from typing import Optional
 
 import httpx
 
+from vector_db_client.ann import AnnAPI
 from vector_db_client.collections import CollectionsAPI
 from vector_db_client.multimodal import MultimodalAPI
 from vector_db_client.vectors import VectorsAPI
@@ -26,6 +27,7 @@ class VectorDBClient:
         self.collections = CollectionsAPI(self)
         self.vectors = VectorsAPI(self)
         self.multimodal = MultimodalAPI(self)
+        self.ann = AnnAPI(self)
 
     def close(self) -> None:
         self._client.close()

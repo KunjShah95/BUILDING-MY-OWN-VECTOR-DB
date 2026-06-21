@@ -9,3 +9,5 @@ export { VectorsAPI } from "./vectors";
 export type { CreateVectorParams, SearchVectorsParams } from "./vectors";
 export { MultimodalAPI } from "./multimodal";
 export type { IngestTextParams, IngestFileParams, SearchTextParams, SearchFileParams } from "./multimodal";
+export { AnnAPI } from "./ann";
+export type { CreateIndexParams } from "./ann";

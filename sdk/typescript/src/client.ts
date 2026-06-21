@@ -1,6 +1,7 @@
 import { CollectionsAPI } from "./collections";
 import { VectorsAPI } from "./vectors";
 import { MultimodalAPI } from "./multimodal";
+import { AnnAPI } from "./ann";
 import type { RequestOptions } from "./http";
 import { jsonGet } from "./http";
 
@@ -17,6 +18,7 @@ export class VectorDBClient {
   public readonly collections: CollectionsAPI;
   public readonly vectors: VectorsAPI;
   public readonly multimodal: MultimodalAPI;
+  public readonly ann: AnnAPI;
 
   constructor(options: ClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "http://localhost:8000").replace(/\/+$/, "");
@@ -26,6 +28,7 @@ export class VectorDBClient {
     this.collections = new CollectionsAPI(this);
     this.vectors = new VectorsAPI(this);
     this.multimodal = new MultimodalAPI(this);
+    this.ann = new AnnAPI(this);
   }
 
   /**

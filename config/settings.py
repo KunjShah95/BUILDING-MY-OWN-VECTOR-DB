@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_BACKEND: str = "memory"
 
+    # Redis Cache and Celery Settings
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
+    celery_task_always_eager: bool = False
+
     # Request limits
     MAX_REQUEST_SIZE_MB: int = 10
 

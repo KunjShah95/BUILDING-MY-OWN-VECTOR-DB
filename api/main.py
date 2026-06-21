@@ -65,6 +65,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="A production-ready Vector Database API with HNSW, IVF, and Hybrid indexing support. Includes unified VectorIndexer with batch processing and auto-optimization.",
     version=settings.APP_VERSION,
+    lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_tags=[
@@ -89,6 +90,7 @@ app = FastAPI(
         {"name": "Monitoring", "description": "Slow query analysis, health details"},
         {"name": "Performance", "description": "Materialized views, adaptive index, benchmarks"},
         {"name": "Integrations", "description": "Metadata enrichment, embedding model lifecycle"},
+        {"name": "ANN Index Management", "description": "Build, save, load, and compare HNSW/IVF/BruteForce indexes"},
     ]
 )
 
@@ -122,9 +124,29 @@ metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
 
-@app.on_event("startup")
-async def _wal_startup_recovery():
-    """Replay any pending Write-Ahead Logs into their indexes on boot."""
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    # Initialize async database
+    from config.database import init_async_db
+    try:
+        await init_async_db()
+        logger.info("Async database initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize async database: {e}")
+        
+    # Initialize cache
+    from services.cache_service import cache_manager
+    if getattr(settings, "redis_url", None):
+        try:
+            await cache_manager.initialize(settings.redis_url)
+            logger.info("Async cache initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize cache: {e}")
+
+    # Replay any pending Write-Ahead Logs into their indexes on boot
     try:
         from services.startup_recovery import recover_all
         from config.database import SessionLocal
@@ -138,6 +160,23 @@ async def _wal_startup_recovery():
             db.close()
     except Exception:  # noqa: BLE001 - never block startup on recovery
         logger.exception("WAL startup recovery failed (continuing without it)")
+        
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down application...")
+    try:
+        await cache_manager.close()
+    except Exception as e:
+        logger.error(f"Error closing cache: {e}")
+        
+    try:
+        from config.database import get_async_engine
+        engine = get_async_engine()
+        if engine:
+            await engine.dispose()
+    except Exception as e:
+        logger.error(f"Error disposing async database engine: {e}")
 
 # Dependency
 def get_vector_service(db: Session = Depends(get_db)) -> VectorService:
@@ -1433,6 +1472,12 @@ except Exception as exc:
 from api.routers.openai_compat import router as openai_compat_router
 app.include_router(openai_compat_router, tags=["OpenAI-Compatible"])
 logger.info("OpenAI-compatible API routes integrated")
+
+# ==================== ANN Index Management Routes ====================
+
+from api.routers.ann_indexes import router as ann_indexes_router
+app.include_router(ann_indexes_router)
+logger.info("ANN index management routes integrated at /api/v1/ann/")
 
 if __name__ == "__main__":
     import uvicorn

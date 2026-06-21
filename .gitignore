@@ -35,3 +35,17 @@ __pycache__/
 .kilo/
 .qodo/
 .claude/
+
+# Rust build artifacts
+target/
+**/target/
+
+# TypeScript build outputs and dependencies
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Test caching
+.pytest_cache/
+**/__pycache__/

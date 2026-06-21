@@ -77,7 +77,7 @@ A **production-ready vector database** built from scratch in Python with **FastA
 - **Terraform** — AWS and Azure infrastructure templates
 - **CI/CD** — GitHub Actions pipeline with lint, test, and build stages
 - **CI/CD** — GitHub Actions pipeline with Python (test + lint + Docker), TypeScript SDK (typecheck + test + build + audit), and Go SDK (build + vet + test) jobs
-- **660+ Python tests** + **91 TypeScript SDK tests** + **64 Go SDK tests** — Covering API endpoints, index algorithms, services, durability, ML models, and infrastructure utilities
+- **660+ Python tests** + **97 TypeScript SDK tests** + **70 Go SDK tests** + **5 Rust SDK integration tests** — Covering API endpoints, index algorithms, services, durability, ML models, and infrastructure utilities
 - **TypeScript SDK** — Full-featured client with `VectorDBClient`, typed models, per-request options, context cancellation
 - **Go SDK** — Idiomatic Go client with typed structs, context support, functional request options
 - **Java SDK** — Maven/OkHttp/Gson client at `sdk/java/`
@@ -143,6 +143,8 @@ graph TB
     Services --> Media
     Services --> Redis
     Services --> LLM
+    Services --> Celery[Celery Background Workers]
+    Celery --> HNSWIndex
     API --> Monitoring
 ```
 
@@ -602,6 +604,7 @@ SDK API surface:
 | `client.collections` | `create`, `list`, `get`, `delete` |
 | `client.vectors` | `create`, `get`, `delete`, `search` |
 | `client.multimodal` | `ingest_text`, `search_text`, `ingest_image`, `search_image`, `ingest_audio`, `search_audio` |
+| `client.ann` | `create_index`, `get_index_info`, `save_index`, `load_index`, `compare_search`, `get_statistics` |
 
 Errors raise `VectorDBHTTPError` with `status_code` and `detail`.
 
@@ -654,13 +657,14 @@ await client.multimodal.ingestImage("photos", { blob: imageBlob });
 | `client.collections` | `create`, `list`, `get`, `delete`, `buildIndex`, `indexStats` |
 | `client.vectors` | `create`, `get`, `delete`, `search` |
 | `client.multimodal` | `ingestText`, `searchText`, `ingestImage`, `searchImage`, `ingestAudio`, `searchAudio`, `query` (RAG) |
+| `client.ann` | `createIndex`, `getIndexInfo`, `saveIndex`, `loadIndex`, `compareSearch`, `getStatistics` |
 
 ```bash
 # Test from the SDK directory
 cd sdk/typescript
 npm install
 npm run typecheck
-npm test         # 91 tests (unit + integration + edge cases)
+npm test         # 97 tests (unit + integration + edge cases)
 npm run build
 ```
 
@@ -707,6 +711,7 @@ func main() {
 | `client.Collections` | `Create`, `List`, `Get`, `Delete`, `BuildIndex`, `IndexStats` |
 | `client.Vectors` | `Create`, `Get`, `Delete`, `Search` |
 | `client.Multimodal` | `IngestText`, `SearchText`, `IngestImage`, `SearchImage`, `IngestAudio`, `SearchAudio`, `Query` (RAG) |
+| `client.Ann` | `CreateIndex`, `GetIndexInfo`, `SaveIndex`, `LoadIndex`, `CompareSearch`, `GetStatistics` |
 
 ```bash
 # Test from the SDK directory
@@ -736,7 +741,25 @@ The SDK includes a `LangChainVectorStore` at `sdk/vector_db_client/langchain_vec
 
 - **Python 3.11+**
 - **PostgreSQL 12+** with `pgvector` extension (optional)
+- **Redis 7+** (for cache and background tasks)
 - **PowerShell** (Windows) or bash (macOS/Linux)
+
+### Production Deployment for Millions of Users
+
+To handle millions of users and scale ANN capabilities horizontally, we rely on Docker Compose with separated Background Workers.
+
+1. **Start the Production Cluster**:
+```bash
+# This starts the Database, Redis, Vector API, Celery Workers, and Celery Beat
+docker-compose up -d
+```
+
+2. **Horizontal Scaling**:
+To handle thousands of concurrent search requests and background vector indexing jobs, scale the API and Worker containers:
+```bash
+docker-compose up --scale vector_api=3 --scale celery_worker=2 -d
+```
+*Note: A reverse proxy like Traefik or NGINX (included in the compose file as a comment) should be configured to load-balance traffic across the `vector_api` containers.*
 
 ### Local Setup
 

@@ -26,6 +26,7 @@ type VectorDBClient struct {
 	Collections *CollectionsAPI
 	Vectors     *VectorsAPI
 	Multimodal  *MultimodalAPI
+	Ann         *AnnAPI
 }
 
 // NewClient creates a new VectorDBClient.
@@ -61,6 +62,7 @@ func NewClient(options ...ClientOptions) *VectorDBClient {
 	c.Collections = &CollectionsAPI{client: c}
 	c.Vectors = &VectorsAPI{client: c}
 	c.Multimodal = &MultimodalAPI{client: c}
+	c.Ann = &AnnAPI{client: c}
 
 	return c
 }
