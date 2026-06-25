@@ -1,5 +1,5 @@
 {
-  "name": "vector-db-client",
+  "name": "vectirx-db",
   "version": "0.1.0",
   "description": "TypeScript client for the Vector Database multimodal API",
   "main": "dist/index.js",
