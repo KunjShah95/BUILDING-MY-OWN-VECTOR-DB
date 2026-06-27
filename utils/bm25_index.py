@@ -82,19 +82,26 @@ class BM25Index:
     def search(self, query: str, k: int = 10) -> List[Tuple[str, float]]:
         """Return up to *k* ``(doc_id, bm25_score)`` tuples sorted by score descending.
 
-        Scores are raw BM25 (not normalised).  An empty list is returned when the
+        Supports quoted phrases: ``"machine learning"`` requires the literal phrase
+        to appear in the document text and boosts its score proportionally.
+        Scores are raw BM25 (not normalised). An empty list is returned when the
         index has no documents or the query contains no known terms.
         """
         if self.total_docs == 0:
             return []
 
-        query_tokens = self._tokenize(query)
-        if not query_tokens:
+        # ── Phrase extraction ────────────────────────────────────────────────
+        phrases = re.findall(r'"([^"]+)"', query)
+        clean_query = re.sub(r'"[^"]+"', ' ', query)
+
+        query_tokens = self._tokenize(clean_query)
+        # Fall back to phrase words for BM25 scoring when there are no free tokens.
+        score_tokens = query_tokens or self._tokenize(' '.join(phrases))
+        if not score_tokens and not phrases:
             return []
 
-        # Count query term frequency for multi-occurrence boosting
-        query_tf = Counter(query_tokens)
-
+        # ── BM25 scoring ─────────────────────────────────────────────────────
+        query_tf = Counter(score_tokens)
         scores: Dict[str, float] = {}
         for doc_id, length in self.doc_lengths.items():
             score = 0.0
@@ -102,17 +109,24 @@ class BM25Index:
                 df = self.doc_freqs.get(term, 0)
                 if df == 0:
                     continue
-
-                # BM25 components
                 idf = math.log((self.total_docs - df + 0.5) / (df + 0.5) + 1.0)
                 tf = self._term_frequency(term, self.doc_texts[doc_id])
                 tf_norm = (tf * (self.k1 + 1)) / (
                     tf + self.k1 * (1.0 - self.b + self.b * length / self.avg_doc_length)
                 )
-                score += idf * tf_norm * qtf  # query term frequency multiplier
-
+                score += idf * tf_norm * qtf
             if score > 0:
                 scores[doc_id] = score
+
+        # ── Phrase filter + boost ─────────────────────────────────────────────
+        if phrases:
+            phrase_scores: Dict[str, float] = {}
+            for doc_id, text in self.doc_texts.items():
+                text_lower = text.lower()
+                if all(p.lower() in text_lower for p in phrases):
+                    boost = sum(text_lower.count(p.lower()) for p in phrases) * 0.5
+                    phrase_scores[doc_id] = scores.get(doc_id, 0.0) + boost
+            scores = phrase_scores
 
         ranked = sorted(scores.items(), key=lambda x: -x[1])
         return ranked[:k]

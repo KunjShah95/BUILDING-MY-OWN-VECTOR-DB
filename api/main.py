@@ -65,7 +65,6 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="A production-ready Vector Database API with HNSW, IVF, and Hybrid indexing support. Includes unified VectorIndexer with batch processing and auto-optimization.",
     version=settings.APP_VERSION,
-    lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_tags=[
@@ -177,6 +176,10 @@ async def lifespan(app: FastAPI):
             await engine.dispose()
     except Exception as e:
         logger.error(f"Error disposing async database engine: {e}")
+
+
+# Attach lifespan now that it is defined (FastAPI was constructed above).
+app.router.lifespan_context = lifespan
 
 # Dependency
 def get_vector_service(db: Session = Depends(get_db)) -> VectorService:
@@ -1371,6 +1374,12 @@ logger.info("Dashboard routes integrated")
 from api.routers.search_enhanced import router as search_enhanced_router
 app.include_router(search_enhanced_router)
 logger.info("Enhanced search API routes integrated")
+
+# ==================== Web Search Routes ====================
+
+from api.routers.web_search import router as web_search_router
+app.include_router(web_search_router)
+logger.info("Web search API routes integrated")
 
 # ==================== Ingestion Queue Routes ====================
 

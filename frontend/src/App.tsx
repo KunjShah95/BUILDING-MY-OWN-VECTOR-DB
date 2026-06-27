@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { label: 'SDKs', href: '#sdks' },
   { label: 'Benchmarks', href: '#benchmarks' },
 ]
+
 const FEATURES = [
   { icon: Zap, title: '9 ANN Algorithms', desc: 'HNSW, IVF+PQ, Vamana/DiskANN, Int8, LSH, KD-Tree, VP-Tree, BM25, Hybrid RRF', color: '#06b6d4' },
   { icon: Brain, title: 'Agentic Memory', desc: 'pgvector-backed persistent memory with CRUD, semantic search, LLM chat, and SSE streaming', color: '#8b5cf6' },
@@ -136,6 +137,9 @@ export default function App() {
                 {NAV_ITEMS.map(item => (
                   <a key={item.label} href={item.href} className="hover:text-gray-300 transition-colors">{item.label}</a>
                 ))}
+                <a href="/search" className="hover:text-gray-300 transition-colors flex items-center gap-1.5">
+                  <Search className="size-3.5" /> Search
+                </a>
                 <a href="https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors flex items-center gap-1.5">
                   <GitForkIcon className="size-3.5" /> GitHub
                 </a>
