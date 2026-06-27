@@ -1507,6 +1507,12 @@ from api.routers.query_mesh import router as query_mesh_router
 app.include_router(query_mesh_router)
 logger.info("Query Mesh API routes integrated at /api/query/*")
 
+# ==================== AI Features Routes (Phase 15) ====================
+
+from api.routers.ai_features import router as ai_features_router
+app.include_router(ai_features_router)
+logger.info("AI Features routes integrated (LTR, RLHF, Explain, Federated)")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
