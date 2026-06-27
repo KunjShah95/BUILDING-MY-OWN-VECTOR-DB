@@ -1347,9 +1347,10 @@ app.include_router(streaming_rag_router)
 logger.info("Streaming RAG API routes integrated")
 
 # Auth API routes
-from api.routers.auth_api import router as auth_router
+from api.routers.auth_api import router as auth_router, sso_router
 app.include_router(auth_router, tags=["Auth"])
-logger.info("Auth API routes integrated")
+app.include_router(sso_router, tags=["Auth"])
+logger.info("Auth API routes integrated (including SSO/OIDC)")
 
 # Tenant API routes
 from api.routers.tenants import router as tenant_router

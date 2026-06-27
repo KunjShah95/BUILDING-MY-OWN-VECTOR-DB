@@ -16,12 +16,12 @@ Global scale with CRDT-based vector sync across regions.
 - ✅ Conflict resolution with vector-clock timestamps (`utils/vector_clock.py` — VectorClock, happens_before, concurrent, VectorClockStore)
 - ✅ Cross-region replication monitoring API (`api/routers/replication.py` — status, regions, sync, conflicts endpoints)
 
-## Phase 12: Enterprise Hardening ⚪
+## Phase 12: Enterprise Hardening ✅
 Production isolation and compliance for regulated industries.
-- ⚪ Tenant-level dedicated schemas + cgroup isolation
-- ⚪ SQL-over-vector-db via pgvector wire-compatible layer
-- ⚪ SAML/SSO/OIDC integration for auth
-- ⚪ Audit dashboard with SOC2/GDPR export wizards
+- ✅ Tenant-level dedicated schemas + namespace isolation (`services/tenant_isolation.py`)
+- ✅ SQL-over-vector-db via pgvector wire-compatible layer (`services/pgvector_compat.py`)
+- ✅ SAML/SSO/OIDC integration for auth (`services/sso_service.py`, `/api/auth/sso/*`)
+- ✅ Audit dashboard with SOC2/GDPR export (`services/audit_service.py`, `/api/enterprise/audit/*`)
 
 ## Phase 13: Plugin SDK & Ecosystem ⚪
 Hot-loadable custom index algorithms, encoders, and storage backends.
