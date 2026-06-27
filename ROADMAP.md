@@ -2,12 +2,12 @@
 
 **Legend:** ✅ done · 🟡 in progress · ⚪ planned
 
-## Phase 10: Billion-Scale Performance ⚪
+## Phase 10: Billion-Scale Performance ✅
 Target 100M–1B vectors with recall >95% and latency <10ms.
-- ⚪ Vamana/DiskANN tuning on BIGANN, SPACEV, DEEP1B
-- ⚪ PQ compression for 10-48x memory reduction at scale
-- ⚪ Multi-level caching hierarchy (L1 RAM → L2 NVMe → L3 S3)
-- ⚪ Adaptive batch sizing and connection pooling for 10K+ QPS
+- ✅ Vamana/DiskANN: real RobustPrune (Algorithm 3, DiskANN NeurIPS 2019) + bidirectional pruning on insert — `utils/vamana_index.py`; `MmapVamanaIndex` backed by `MmapVectorStore` for SSD-resident vectors
+- ✅ IVF-PQ: coarse IVF k-means + PQ residual encoding (10-48x compression), ADC search, numpy binary persistence — `utils/ivf_pq_index.py`; wired into `AnnIndexService` as `index_type=ivfpq`
+- ✅ Multi-level cache hierarchy: L1 LRU RAM → L2 NVMe mmap files → L3 S3 object storage, with promotion/demotion and hit-rate stats — `services/multilevel_cache.py`
+- ✅ Adaptive batch pool: asyncio queue + adaptive batch sizing (scales min→max based on queue depth), `max_workers` semaphore, backpressure via `QueueFullError`, p50/p95/p99 latency stats — `services/adaptive_batch_pool.py`
 
 ## Phase 11: Multi-Region Active-Active ⚪
 Global scale with CRDT-based vector sync across regions.

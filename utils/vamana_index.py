@@ -232,18 +232,16 @@ class VamanaIndex:
     ) -> List[int]:
         """RobustPrune heuristic (Algorithm 3 from DiskANN paper).
 
-        Keeps neighbors that are closest to the node AND well-distributed
-        in the angular/Euclidean space.
+        From the candidate set, greedily select neighbors that are close to
+        node_idx AND angularly diverse.  A candidate p is skipped if some
+        already-selected neighbor v satisfies d(v, p) <= alpha * d(node, p),
+        meaning v "covers" p better than node_idx does.
         """
-        if not candidates:
-            return []
+        raise NotImplementedError("Use VamanaVectorIndex for full implementation")
 
-        # We need vector data for pruning; the actual implementation
-        # requires access to vectors. This is a placeholder that simply
-        # returns the closest R candidates.
-        # Full implementation would check: if d(v, p) > alpha * d(u, p)
-        # then keep p (where v is already selected, u is the node)
-        return candidates[:R]
+    def _vec_for(self, idx: int) -> Optional[np.ndarray]:
+        """Return the vector for graph node index idx. Override in subclasses."""
+        raise NotImplementedError
 
     def _search_beam(
         self,
@@ -302,6 +300,10 @@ class VamanaVectorIndex(VamanaIndex):
         self._vectors: Dict[str, np.ndarray] = {}
         self._vec_lock = threading.RLock()
 
+    def _vec_for(self, idx: int) -> Optional[np.ndarray]:
+        vid = self.ids[idx] if idx < len(self.ids) else None
+        return self._vectors.get(vid) if vid else None
+
     def _distance(self, i: int, j: int) -> float:
         vid_i = self.ids[i]
         vid_j = self.ids[j]
@@ -312,6 +314,58 @@ class VamanaVectorIndex(VamanaIndex):
         if self.metric == "cosine":
             return max(0.0, 1.0 - float(np.dot(vi, vj)))
         return float(np.linalg.norm(vi - vj))
+
+    def _robust_prune(
+        self, node_idx: int, candidates: List[int], alpha: float, R: int
+    ) -> List[int]:
+        """RobustPrune (Algorithm 3, DiskANN NeurIPS 2019).
+
+        Greedily picks up to R neighbors from candidates.  Each new pick p*
+        is the closest remaining candidate to node_idx.  After picking p*,
+        any remaining candidate p is pruned if d(p*, p) <= alpha * d(node, p)
+        — meaning p* already provides a better shortcut to p than node does.
+        """
+        node_vec = self._vec_for(node_idx)
+        if node_vec is None or not candidates:
+            return candidates[:R]
+
+        # Pre-compute distances: candidate -> distance to node_idx
+        def _d_to_node(c: int) -> float:
+            cv = self._vec_for(c)
+            if cv is None:
+                return float("inf")
+            if self.metric == "cosine":
+                return max(0.0, 1.0 - float(np.dot(node_vec, cv)))
+            return float(np.linalg.norm(node_vec - cv))
+
+        remaining = sorted(candidates, key=_d_to_node)
+        selected: List[int] = []
+
+        while remaining and len(selected) < R:
+            p_star = remaining[0]
+            selected.append(p_star)
+            remaining = remaining[1:]
+
+            p_star_vec = self._vec_for(p_star)
+            if p_star_vec is None:
+                continue
+
+            # Prune candidates closer to p_star than alpha * d(node, candidate)
+            pruned = []
+            for p in remaining:
+                p_vec = self._vec_for(p)
+                if p_vec is None:
+                    continue
+                d_node_p = _d_to_node(p)
+                if self.metric == "cosine":
+                    d_pstar_p = max(0.0, 1.0 - float(np.dot(p_star_vec, p_vec)))
+                else:
+                    d_pstar_p = float(np.linalg.norm(p_star_vec - p_vec))
+                if d_pstar_p > alpha * d_node_p:
+                    pruned.append(p)
+            remaining = pruned
+
+        return selected
 
     def _compute_distances(self, indices: List[int], query: np.ndarray) -> np.ndarray:
         """Batch compute distances from query to a list of node indices."""
@@ -412,19 +466,24 @@ class VamanaVectorIndex(VamanaIndex):
             if self.entry_point is None:
                 self.entry_point = idx
             else:
-                # Beam search to find nearest neighbors
+                # Beam search finds candidate neighbors
                 indices, _ = self._search_beam(vec, self.L, self.entry_point)
+                candidates = [i for i in indices if i != idx]
 
-                # Connect to the nearest (up to R)
-                neighbors = [i for i in indices if i != idx][:self.R]
+                # RobustPrune: angular diversity filter
+                neighbors = self._robust_prune(idx, candidates, self.alpha, self.R)
+
                 for j, nid in enumerate(neighbors):
-                    # Set j-th neighbor slot in row idx
                     self._adj[idx, j] = int(nid)
-                    # Bidirectional: find first free slot in row nid
-                    n_row_data = self._adj[nid, :self.R]
-                    free_slots = [s for s in range(self.R) if int(n_row_data[s]) < 0]
-                    if free_slots:
-                        self._adj[nid, free_slots[0]] = int(idx)
+                    # Bidirectional: also prune nid's neighbor list
+                    n_row = self._adj[nid, :self.R]
+                    n_neighbors = [int(x) for x in n_row if int(x) >= 0]
+                    if idx not in n_neighbors:
+                        n_neighbors.append(idx)
+                    pruned_back = self._robust_prune(nid, n_neighbors, self.alpha, self.R)
+                    self._adj[nid, :self.R] = -1
+                    for k2, nb in enumerate(pruned_back):
+                        self._adj[nid, k2] = int(nb)
 
             self._save_meta()
 
@@ -471,3 +530,172 @@ class VamanaVectorIndex(VamanaIndex):
                 "entry_point": self.entry_point,
                 "capacity": self._capacity,
             }
+
+
+class MmapVamanaIndex(VamanaIndex):
+    """Vamana index with SSD-backed vector storage via MmapVectorStore.
+
+    Suitable for datasets larger than RAM.  Vectors live on NVMe; the OS
+    page cache keeps hot vectors resident without explicit management.
+
+    Parameters
+    ----------
+    dim : int
+        Vector dimension.
+    store_dir : str
+        Directory for the MmapVectorStore (vectors.dat + meta.json).
+    capacity : int
+        Initial capacity for the mmap store (rows pre-allocated).
+    **kwargs
+        Forwarded to VamanaIndex (metric, L, R, alpha, mmap_dir).
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        store_dir: str = "vamana_mmap_vectors",
+        capacity: int = 1_000_000,
+        **kwargs,
+    ):
+        super().__init__(dim=dim, **kwargs)
+        from utils.mmap_store import MmapVectorStore
+        self._store = MmapVectorStore(store_dir, dim=dim, capacity=capacity)
+        self._vec_lock = threading.RLock()
+
+    def _vec_for(self, idx: int) -> Optional[np.ndarray]:
+        if idx >= len(self.ids):
+            return None
+        vid = self.ids[idx]
+        return self._store.get(vid)
+
+    def _distance(self, i: int, j: int) -> float:
+        vi = self._vec_for(i)
+        vj = self._vec_for(j)
+        if vi is None or vj is None:
+            return float("inf")
+        if self.metric == "cosine":
+            return max(0.0, 1.0 - float(np.dot(vi, vj)))
+        return float(np.linalg.norm(vi - vj))
+
+    def _compute_distances(self, indices: List[int], query: np.ndarray) -> np.ndarray:
+        vecs = []
+        valid = []
+        for idx in indices:
+            v = self._vec_for(idx)
+            if v is not None:
+                vecs.append(v)
+                valid.append(idx)
+        if not vecs:
+            return np.array([])
+        arr = np.stack(vecs)
+        if self.metric == "cosine":
+            return 1.0 - arr @ query
+        return np.sqrt(np.sum((arr - query) ** 2, axis=1))
+
+    def _robust_prune(
+        self, node_idx: int, candidates: List[int], alpha: float, R: int
+    ) -> List[int]:
+        node_vec = self._vec_for(node_idx)
+        if node_vec is None or not candidates:
+            return candidates[:R]
+
+        def _d(v1: np.ndarray, v2: np.ndarray) -> float:
+            if self.metric == "cosine":
+                return max(0.0, 1.0 - float(np.dot(v1, v2)))
+            return float(np.linalg.norm(v1 - v2))
+
+        # Pre-fetch all candidate vectors once (batch mmap reads)
+        cand_vecs: Dict[int, np.ndarray] = {}
+        for c in candidates:
+            v = self._vec_for(c)
+            if v is not None:
+                cand_vecs[c] = v
+
+        remaining = sorted(
+            [c for c in candidates if c in cand_vecs],
+            key=lambda c: _d(node_vec, cand_vecs[c]),
+        )
+        selected: List[int] = []
+
+        while remaining and len(selected) < R:
+            p_star = remaining[0]
+            selected.append(p_star)
+            remaining = remaining[1:]
+            p_star_vec = cand_vecs[p_star]
+            remaining = [
+                p for p in remaining
+                if _d(p_star_vec, cand_vecs[p]) > alpha * _d(node_vec, cand_vecs[p])
+            ]
+
+        return selected
+
+    def insert(self, vector: List[float], vector_id: str, metadata: Any = None):
+        with self._lock:
+            vec = np.array(vector, dtype=np.float32)
+            if self.metric == "cosine":
+                vec = _l2_normalize(vec)
+
+            self._store.add(vector_id, vec)
+
+            idx = len(self.ids)
+            self.ids.append(vector_id)
+            self.id_to_index[vector_id] = idx
+            if metadata:
+                self.metadata[vector_id] = metadata
+            self.deleted.discard(idx)
+
+            if idx >= self._capacity:
+                self._grow_mmap(idx + 1)
+
+            if self.entry_point is None:
+                self.entry_point = idx
+            else:
+                indices, _ = self._search_beam(vec, self.L, self.entry_point)
+                candidates = [i for i in indices if i != idx]
+                neighbors = self._robust_prune(idx, candidates, self.alpha, self.R)
+
+                for j, nid in enumerate(neighbors):
+                    self._adj[idx, j] = int(nid)
+                    n_row = self._adj[nid, :self.R]
+                    n_neighbors = [int(x) for x in n_row if int(x) >= 0]
+                    if idx not in n_neighbors:
+                        n_neighbors.append(idx)
+                    pruned_back = self._robust_prune(nid, n_neighbors, self.alpha, self.R)
+                    self._adj[nid, :self.R] = -1
+                    for k2, nb in enumerate(pruned_back):
+                        self._adj[nid, k2] = int(nb)
+
+            self._save_meta()
+
+    def search(
+        self,
+        query_vector: List[float],
+        k: int = 10,
+        beam_width: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        bw = beam_width or self.L
+        q = np.array(query_vector, dtype=np.float32)
+        if self.metric == "cosine":
+            q = _l2_normalize(q)
+        indices, dists = self._search_beam(q, bw, self.entry_point)
+        results = []
+        for idx, d in zip(indices, dists):
+            if idx >= len(self.ids):
+                continue
+            vid = self.ids[idx]
+            if int(idx) in self.deleted:
+                continue
+            results.append({
+                "vector_id": vid,
+                "distance": float(d),
+                "metadata": self.metadata.get(vid),
+            })
+            if len(results) >= k:
+                break
+        return results
+
+    def get_stats(self) -> Dict[str, Any]:
+        base = super().get_stats()
+        base["store_count"] = len(self._store)
+        base["backend"] = "mmap_disk"
+        return base
