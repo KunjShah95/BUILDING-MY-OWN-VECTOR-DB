@@ -194,21 +194,16 @@ class VectorService:
             )
 
             if self.hnsw_db.hnsw_index is not None or self.ivf_db.ivf_index is not None:
-                for vector_data in vectors:
-                    cid = vector_data.get("collection_id")
-                    self._insert_into_indexes(
-                        vector_data["vector"],
-                        vector_data["vector_id"],
-                        vector_data.get("metadata"),
-                        cid,
-                    )
-                    
+                by_cid: Dict[str, List[Dict[str, Any]]] = {}
+                for v in vectors:
+                    cid = v.get("collection_id")
+                    by_cid.setdefault(cid, []).append(v)
+                    self._insert_into_indexes(v["vector"], v["vector_id"], v.get("metadata"), cid)
+
+                for cid, group in by_cid.items():
                     wal = self._get_wal(cid)
-                    wal.log_insert(
-                        vector_data["vector_id"],
-                        vector_data["vector"],
-                        vector_data.get("metadata")
-                    )
+                    wal.log_batch_insert(group)
+                    wal.flush()
 
             # Index text metadata for BM25 sparse retrieval
             for vector_data in vectors:

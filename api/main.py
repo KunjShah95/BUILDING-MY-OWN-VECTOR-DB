@@ -1488,6 +1488,12 @@ from api.routers.ann_indexes import router as ann_indexes_router
 app.include_router(ann_indexes_router)
 logger.info("ANN index management routes integrated at /api/v1/ann/")
 
+# ==================== Replication Routes (Phase 11) ====================
+
+from api.routers.replication import router as replication_router
+app.include_router(replication_router)
+logger.info("Replication API routes integrated at /api/replication/")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
