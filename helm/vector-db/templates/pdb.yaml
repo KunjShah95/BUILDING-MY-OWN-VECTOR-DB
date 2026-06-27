@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "vector-db.fullname" . }}
+  labels:
+    {{- include "vector-db.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "vector-db.selectorLabels" . | nindent 6 }}

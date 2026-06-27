@@ -1,0 +1,21 @@
+{{- if .Values.spotNodepool.enabled }}
+# Spot/preemptible node pool configuration.
+# This ConfigMap documents spot node settings; actual node pool provisioning
+# is done via cloud provider CLI / Terraform (see terraform/ directory).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vector-db.fullname" . }}-spot-config
+  labels:
+    {{- include "vector-db.labels" . | nindent 4 }}
+data:
+  nodeSelector: |
+    {{- toYaml .Values.spotNodepool.nodeSelector | nindent 4 }}
+  tolerations: |
+    {{- toYaml .Values.spotNodepool.tolerations | nindent 4 }}
+  note: >
+    Apply the above nodeSelector and tolerations to the Deployment when
+    scheduling API pods onto spot/preemptible nodes to reduce compute costs.
+    Use PodDisruptionBudget (pdb.yaml) to ensure minAvailable=1 during
+    spot interruptions.
+{{- end }}
