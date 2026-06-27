@@ -1488,6 +1488,24 @@ from api.routers.ann_indexes import router as ann_indexes_router
 app.include_router(ann_indexes_router)
 logger.info("ANN index management routes integrated at /api/v1/ann/")
 
+# ==================== Billing Routes (Phase 16) ====================
+
+from api.routers.billing import router as billing_router
+app.include_router(billing_router)
+logger.info("Billing API routes integrated at /api/billing/")
+
+# ==================== Admin Console Routes (Phase 16) ====================
+
+from api.routers.admin_console import router as admin_console_router
+app.include_router(admin_console_router)
+logger.info("Admin console routes integrated at /api/admin/console/")
+
+# ==================== PITR Backup Routes (Phase 16) ====================
+
+from api.routers.pitr import router as pitr_router
+app.include_router(pitr_router)
+logger.info("PITR backup routes integrated at /api/admin/backups/")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

@@ -18,5 +18,25 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+          averageUtilization: {{ .Values.autoscaling.targetCPU | default 70 }}
+    - type: Pods
+      pods:
+        metric:
+          name: vectordb_qps
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.autoscaling.targetQPS | default 1000 }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
 {{- end }}
