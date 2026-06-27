@@ -30,7 +30,7 @@ Hot-loadable custom index algorithms, encoders, and storage backends.
 - ✅ Marketplace API (`api/routers/plugins.py`) — list, load, unregister, search, stats endpoints
 - ✅ Plugin sandbox (tracemalloc memory guard, subprocess isolation, 30s timeout)
 
-## Phase 14: Intelligent Query Mesh ⚪
+## Phase 14: Intelligent Query Mesh ✅
 Self-optimizing query routing and cost governance.
 - ⚪ Query cost predictor (estimated scan count before execution)
 - ⚪ Budget-aware query scheduler with tenant credit pools

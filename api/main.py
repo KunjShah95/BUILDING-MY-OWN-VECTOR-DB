@@ -1501,6 +1501,12 @@ from api.routers.plugins import router as plugins_router
 app.include_router(plugins_router)
 logger.info("Plugin marketplace routes integrated at /api/plugins/")
 
+# ==================== Query Mesh Routes (Phase 14) ====================
+
+from api.routers.query_mesh import router as query_mesh_router
+app.include_router(query_mesh_router)
+logger.info("Query Mesh API routes integrated at /api/query/*")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
