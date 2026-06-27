@@ -23,12 +23,12 @@ Production isolation and compliance for regulated industries.
 - ✅ SAML/SSO/OIDC integration for auth (`services/sso_service.py`, `/api/auth/sso/*`)
 - ✅ Audit dashboard with SOC2/GDPR export (`services/audit_service.py`, `/api/enterprise/audit/*`)
 
-## Phase 13: Plugin SDK & Ecosystem ⚪
+## Phase 13: Plugin SDK & Ecosystem ✅
 Hot-loadable custom index algorithms, encoders, and storage backends.
-- ⚪ Plugin registry with versioned manifest
-- ⚪ Plugin SDK for Python/Go/Rust
-- ⚪ Marketplace for community plugins
-- ⚪ Plugin sandbox (resource limits, crash isolation)
+- ✅ Plugin registry with versioned manifest (`services/plugin_registry.py`)
+- ✅ Plugin SDK base classes (`sdk/plugin_sdk/`) — BaseIndexPlugin, BaseEncoderPlugin, BaseStoragePlugin, @plugin decorator, BruteForcePlugin example
+- ✅ Marketplace API (`api/routers/plugins.py`) — list, load, unregister, search, stats endpoints
+- ✅ Plugin sandbox (tracemalloc memory guard, subprocess isolation, 30s timeout)
 
 ## Phase 14: Intelligent Query Mesh ⚪
 Self-optimizing query routing and cost governance.

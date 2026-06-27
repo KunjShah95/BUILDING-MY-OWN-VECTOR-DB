@@ -1495,6 +1495,12 @@ from api.routers.replication import router as replication_router
 app.include_router(replication_router)
 logger.info("Replication API routes integrated at /api/replication/")
 
+# ==================== Plugin Marketplace Routes (Phase 13) ====================
+
+from api.routers.plugins import router as plugins_router
+app.include_router(plugins_router)
+logger.info("Plugin marketplace routes integrated at /api/plugins/")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
