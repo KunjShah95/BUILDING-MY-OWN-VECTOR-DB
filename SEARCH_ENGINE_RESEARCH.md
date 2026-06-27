@@ -328,3 +328,71 @@ Both share the retrieval core; answer engine = search engine + generation step.
 3. `client.search()` in Python + TS SDK.
 4. MCP `web_search` tool.
 That's all four persona groups served from one engine.
+
+---
+
+## Pass 3 — 2026-06-27 (LTR · sparse encoders · freshness · generative answers · observability)
+
+### 12. Learning to Rank (LTR) — closing the feedback loop
+
+- [Pointwise, Pairwise and Listwise LTR explained (Medium, Bhangale)](https://medium.com/@mayurbhangale/pointwise-pairwise-and-listwise-learning-to-rank-baf0ad76203e) — clearest intro; pairwise > pointwise for relative ordering; listwise considers the whole ranked list.
+- [Comparative Guide: Pointwise/Pairwise/Listwise (VectorWorks Academy, Medium)](https://medium.com/@VectorWorksAcademy/understanding-learning-to-rank-a-comparative-guide-to-pointwise-pairwise-and-listwise-approaches-f783dbd5872e) — practical trade-offs per approach; when to use each for search.
+- [FIRST: Faster Improved Listwise Reranking with Single Token Decoding (arXiv 2406.15657)](https://arxiv.org/pdf/2406.15657) — LLM-based listwise reranking via single token decode; high-quality, near pairwise accuracy at lower cost.
+- [RankFormer: Listwise LTR with Listwide Labels (arXiv 2306.5808)](https://arxiv.org/pdf/2306.5808) — Transformer-core LTR; jointly optimizes listwide + listwise objectives; SOTA on several IR benchmarks.
+- **Key data point**: our click signals (`POST /api/web/click`) feed pointwise LTR directly — position + query + URL → relevance proxy. Start with BM25-style importance weighting, graduate to pairwise via click-pair implicit labels (clicked over non-clicked = positive pair).
+- **Phase tie-in**: ROADMAP Phase 15 (RLHF/LTR) slot — wire `_analytics["clicks"]` into a lightweight XGBoost/LightGBM ranker over BM25 + ANN score features.
+
+### 13. Sparse encoders — SPLADE, BM42, miniCOIL
+
+- [BM42: New Baseline for Hybrid Search (Qdrant)](https://qdrant.tech/articles/bm42/) — Qdrant's BM25-inspired neural sparse retriever; uses transformer attention to weight terms instead of TF; FastEmbed handle `Qdrant/bm42-all-minilm-l6-v2-attentions`. Often beats SPLADE at lower cost.
+- [Keyword Search with Sparse Vectors — SPLADE demo (Qdrant course)](https://qdrant.tech/course/essentials/day-3/sparse-retrieval-demo/) — side-by-side BM25 vs SPLADE++; shows when learned sparse beats lexical.
+- [Decoding Dense Embeddings: Sparse Autoencoders (arXiv 2506.00041)](https://arxiv.org/pdf/2506.00041) — sparse autoencoders to interpret and discretize dense embeddings; interpretability angle.
+- [Reducing Multi-Vector Retrieval Footprint via Token Pooling (arXiv 2409.14683)](https://arxiv.org/pdf/2409.14683) — compress ColBERT multi-vectors via pooling; 4× storage cut, <1 NDCG loss.
+- [BM42 vs Conventional Methods — thesis (DiVA portal)](https://www.diva-portal.org/smash/get/diva2:1979031/FULLTEXT01.pdf) — independent evaluation; BM42 matches/exceeds BM25+dense hybrid on several retrieval tasks.
+- **Tie to our BM25 index**: our `BM25Index` (sparse.json) is pure lexical — BM42/SPLADE would be a drop-in upgrade for the sparse side of RRF fusion. Worth testing on BEIR with `eval/beir.py`.
+
+### 14. Crawl freshness & adaptive scheduling
+
+- [Optimal Freshness Crawl Under Politeness Constraints (Microsoft Research)](https://www.microsoft.com/en-us/research/publication/optimal-freshness-crawl-under-politeness-constraints/) — foundational paper; PoliteBinaryLambdaCrawl = first provably optimal freshness scheduler with per-host delay constraints. Algorithm is RL-free, practical to implement.
+- [Web Crawling in 2026: Complete Guide (PromptCloud)](https://www.promptcloud.com/blog/all-you-need-to-know-about-web-crawling/) — covers JS-rendered pages, anti-bot defenses, auth walls; 60% of reputable sites block AI crawlers in 2026 vs 9.1% of misinformation sites (important: need identifiable UA + respectful rate limits).
+- [Web Crawler System Design (Grokking)](https://grokkingthesystemdesign.com/guides/web-crawler-system-design/) — architecture: URL frontier (priority queue) → fetcher pool → extractor → dedup → URL scheduler. Covers sharding, bloom filters, recrawl estimation.
+- **Key stat**: 60% of reputable domains actively block AI crawlers in 2026. Mitigation: real User-Agent string (`VectorDBBot/0.1 +https://… contact@…`), honor robots.txt, back off on 429/503, maintain crawl-delay.
+- **Tie to our code**: `FreshnessTracker` (SQLite) + `worker.py` implement adaptive recrawl. PoliteBinaryLambdaCrawl can replace the ×0.5/×1.5 heuristic with an optimal schedule given crawl budget.
+
+### 15. Generative / answer engine architecture
+
+- [How Perplexity AI Answers Work: Retrieval, Ranking, Citation Pipeline (ZipTie.dev)](https://ziptie.dev/blog/how-perplexity-ai-answers-work/) — **most detailed public breakdown**: 6-stage pipeline: (1) query parse, (2) embedding-based indexing, (3) hybrid BM25+dense retrieval, (4) multi-layer ML ranking, (5) prompt assembly with pre-embedded citations, (6) constrained LLM generation. Perplexity Deep Research = agentic loop: retrieve → reason what's missing → retrieve again (30+ iterations, 100+ sources).
+- [Xinyu AI Search (arXiv 2505.21849)](https://arxiv.org/pdf/2505.21849) — enhanced relevance with rich answer presentation; covers result diversity, multi-document synthesis grounding.
+- [RAG and Perplexity in 2026 (FutureAGI)](https://futureagi.com/blog/rag-llm-perplexity-2025/) — positions RAG as internal technique, Perplexity as UX layer; useful framing for our answer engine layer.
+- **Perplexity by numbers (2026)**: ~780M monthly queries, 6-stage pipeline, citation-grounded output. Our `AnswerCard` component stitches snippets — real upgrade is routing `paged_results[:5]` through LLM synthesis with citations.
+- **Tie to our stack**: `api/routers/rag.py` already exists. Wire `/api/web/search` top results → `rag.py` synthesis → answer + `[1][2][3]` citations shown in `AnswerCard`. That completes the Perplexity-style answer loop.
+
+### 16. Search engine observability & analytics (what to measure)
+
+- **Zero-result rate**: 64.82% of Google searches end without a click in 2026 (up from 50% in 2019). For our engine, zero-result queries (`_analytics["zero_result_queries"]`) are the primary quality signal — spike = index gap or query coverage hole.
+- **CTR degradation**: AI Overviews cut organic CTR 61% (1.76% → 0.61%). Takeaway for own engine: if you add an answer card (generative synthesis), expect raw click-through on individual results to drop even while query satisfaction rises. Track both CTR and session depth.
+- **What 67% of SEO teams changed**: raw click volume is no longer the primary success metric. Shift to: (a) satisfied sessions, (b) click-depth (did user click → return to search = bad), (c) query reformulation rate (reformulate = not satisfied).
+- **Our analytics endpoint** (`GET /api/web/analytics`): currently tracks p50/p95 latency, zero-result rate, CTR. Missing: query reformulation rate, session depth, click position bias correction (position 1 always gets more clicks regardless of quality → DCG-normalize).
+- **Practical add**: log `(query, result_position, clicked: bool, session_id)` tuples — join with `_recent_queries` deque to detect reformulations. Already halfway there with `/click` endpoint.
+
+### 17. More build tutorials (from-scratch, hands-on)
+
+- [Building a search engine with 3B neural embeddings in 2 months (Wilson Lin's blog)](https://blog.wilsonl.in/search-engine/) — **must-read**: solo developer builds a web-scale neural search engine. Covers crawl infra, quantized embeddings, ANN at scale, serving latency tricks. Shows what's achievable by one person.
+- [Build a Search Engine from Scratch (DEV, mshojaei77)](https://dev.to/mshojaei77/build-a-search-engine-from-scratch-1jf) — step-by-step: crawler → tokenizer → inverted index → tf-idf → BM25 → HNSW. Code-first.
+- [How to Build a Search Engine (Meilisearch)](https://www.meilisearch.com/blog/how-to-build-search-engine) — production-grade guide: architecture choices, tokenization, relevancy tuning, scaling.
+- [Let's Build a Search Engine (Anvil Works)](https://anvil.works/blog/how-to-build-a-search-engine) — Python end-to-end, minimal deps, good for understanding internals.
+- [How Search Engines Work 2025: Crawling, Indexing, Ranking (Key-G)](https://key-g.com/blog/how-do-search-engines-work-in-2025-crawling-indexing-and-ranking/) — explainer for mental model alignment.
+
+---
+
+## Pass 3 synthesis — what to build next
+
+| Priority | Item | Source |
+|----------|------|--------|
+| 🔴 High | Wire `rag.py` → answer synthesis over top search results → complete `AnswerCard` | §15 Perplexity pipeline |
+| 🔴 High | Replace BM25-only sparse with BM42/SPLADE++ for the sparse RRF arm | §13 BM42 |
+| 🟡 Med | Add query reformulation signal to analytics (join `/click` + `_recent_queries`) | §16 observability |
+| 🟡 Med | Upgrade `FreshnessTracker` to PoliteBinaryLambdaCrawl scheduling | §14 freshness |
+| 🟡 Med | Pointwise LTR from click signals — `clicks` list → XGBoost ranker | §12 LTR |
+| 🟢 Low | Token pooling on ColBERT vectors (4× storage reduction) | §13 arXiv 2409.14683 |
+| 🟢 Low | FIRST/RankFormer listwise reranking as drop-in over top-50 | §12 LTR |
