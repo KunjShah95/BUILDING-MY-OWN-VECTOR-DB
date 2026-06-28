@@ -137,10 +137,10 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize async database: {e}")
         
     # Initialize cache
-    from services.cache_service import cache_manager
+    from services.cache_service import async_cache_manager as cache_manager
     if getattr(settings, "redis_url", None):
         try:
-            await cache_manager.initialize(settings.redis_url)
+            await cache_manager.init(settings.redis_url)
             logger.info("Async cache initialized")
         except Exception as e:
             logger.error(f"Failed to initialize cache: {e}")
@@ -1347,9 +1347,10 @@ app.include_router(streaming_rag_router)
 logger.info("Streaming RAG API routes integrated")
 
 # Auth API routes
-from api.routers.auth_api import router as auth_router
+from api.routers.auth_api import router as auth_router, sso_router
 app.include_router(auth_router, tags=["Auth"])
-logger.info("Auth API routes integrated")
+app.include_router(sso_router, tags=["Auth"])
+logger.info("Auth API routes integrated (including SSO/OIDC)")
 
 # Tenant API routes
 from api.routers.tenants import router as tenant_router
@@ -1468,11 +1469,9 @@ logger.info("Integration API routes integrated")
 # ==================== GraphQL API ====================
 
 try:
-    from strawberry.asgi import GraphQL as GraphQLApp
-    from api.graphql.schema import schema as gql_schema
-    graphql_app = GraphQLApp(gql_schema)
-    app.mount("/graphql", graphql_app)
-    logger.info("GraphQL API mounted at /graphql")
+    from api.graphql_schema import graphql_router as _gql_router
+    app.include_router(_gql_router)
+    logger.info("GraphQL API mounted at /graphql (Strawberry)")
 except Exception as exc:
     logger.warning("GraphQL API unavailable: %s", exc)
 
@@ -1487,6 +1486,48 @@ logger.info("OpenAI-compatible API routes integrated")
 from api.routers.ann_indexes import router as ann_indexes_router
 app.include_router(ann_indexes_router)
 logger.info("ANN index management routes integrated at /api/v1/ann/")
+
+# ==================== Replication Routes (Phase 11) ====================
+
+from api.routers.replication import router as replication_router
+app.include_router(replication_router)
+logger.info("Replication API routes integrated at /api/replication/")
+
+# ==================== Plugin Marketplace Routes (Phase 13) ====================
+
+from api.routers.plugins import router as plugins_router
+app.include_router(plugins_router)
+logger.info("Plugin marketplace routes integrated at /api/plugins/")
+
+# ==================== Query Mesh Routes (Phase 14) ====================
+
+from api.routers.query_mesh import router as query_mesh_router
+app.include_router(query_mesh_router)
+logger.info("Query Mesh API routes integrated at /api/query/*")
+
+# ==================== AI Features Routes (Phase 15) ====================
+
+from api.routers.ai_features import router as ai_features_router
+app.include_router(ai_features_router)
+logger.info("AI Features routes integrated (LTR, RLHF, Explain, Federated)")
+
+# ==================== Billing Routes (Phase 16) ====================
+
+from api.routers.billing import router as billing_router
+app.include_router(billing_router)
+logger.info("Billing API routes integrated at /api/billing/")
+
+# ==================== Admin Console Routes (Phase 16) ====================
+
+from api.routers.admin_console import router as admin_console_router
+app.include_router(admin_console_router)
+logger.info("Admin console routes integrated at /api/admin/console/")
+
+# ==================== PITR Backup Routes (Phase 16) ====================
+
+from api.routers.pitr import router as pitr_router
+app.include_router(pitr_router)
+logger.info("PITR backup routes integrated at /api/admin/backups/")
 
 if __name__ == "__main__":
     import uvicorn

@@ -18,6 +18,7 @@ from services.vector_service import VectorService
 from utils.brute_force_index import BruteForceIndex
 from utils.hnsw_index import HNSWIndex
 from utils.ivf_index import IVFIndex
+from utils.ivf_pq_index import IVFPQIndex
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,13 @@ _INDEX_FACTORIES = {
     "ivf": lambda dim, kw: IVFIndex(
         n_clusters=kw.get("n_clusters", 100),
         n_probes=kw.get("n_probes", 10),
+    ),
+    "ivfpq": lambda dim, kw: IVFPQIndex(
+        nlist=kw.get("nlist", max(16, int(dim ** 0.5))),
+        M=kw.get("M", 8),
+        k_sub=kw.get("k_sub", 256),
+        nprobe=kw.get("nprobe", 8),
+        metric=kw.get("metric", "cosine"),
     ),
     "brute": lambda dim, kw: BruteForceIndex(
         dimension=dim,
@@ -59,6 +67,15 @@ class AnnIndexService:
     # ── init helpers ─────────────────────────────────────────────────────────
 
     def _load_saved_indexes(self) -> None:
+        # IVF-PQ uses a directory
+        ivfpq_dir = os.path.join(INDEX_DIR, "ivfpq_index")
+        if os.path.isdir(ivfpq_dir):
+            try:
+                self._indexes["ivfpq"] = IVFPQIndex.load(ivfpq_dir)
+                logger.info("Auto-loaded ivfpq index from %s/", ivfpq_dir)
+            except Exception as exc:
+                logger.warning("Failed to auto-load ivfpq: %s", exc)
+
         for filename in os.listdir(INDEX_DIR):
             if not filename.endswith(".json"):
                 continue
@@ -74,7 +91,7 @@ class AnnIndexService:
                     idx.load(filepath)
                     self._indexes["ivf"] = idx
                 elif index_type == "brute":
-                    idx = BruteForceIndex(dimension=1)  # dimension fixed on load
+                    idx = BruteForceIndex(dimension=1)
                     idx.load(filepath)
                     self._indexes["brute"] = idx
                 logger.info("Auto-loaded %s index from %s", index_type, filepath)
@@ -111,7 +128,7 @@ class AnnIndexService:
                 ]
                 index.insert_batch(batch)
 
-            elif index_type == "ivf":
+            elif index_type in ("ivf", "ivfpq"):
                 index.train([[float(x) for x in v] for v in vector_data])
                 batch = [
                     {"vector": vec, "vector_id": vid, "metadata": meta}
@@ -156,6 +173,8 @@ class AnnIndexService:
             elif index_type == "ivf":
                 idx = IVFIndex()
                 idx.load(filepath)
+            elif index_type == "ivfpq":
+                idx = IVFPQIndex.load(filepath)
             elif index_type == "brute":
                 idx = BruteForceIndex(dimension=1)
                 idx.load(filepath)
@@ -214,7 +233,7 @@ class AnnIndexService:
                         {"vector_id": r["vector_id"], "distance": r["distance"]}
                         for r in raw
                     ]
-                elif index_type == "ivf":
+                elif index_type in ("ivf", "ivfpq"):
                     raw = index.search(query_vector, k=k)
                     results = [
                         {"vector_id": r["vector_id"], "distance": r["distance"]}
@@ -242,17 +261,19 @@ class AnnIndexService:
 
     def _persist_index(self, index_type: str) -> None:
         index = self._indexes[index_type]
-        filepath = os.path.join(INDEX_DIR, f"{index_type}_index.json")
-        index.save(filepath)
-        logger.info("Persisted %s index → %s", index_type, filepath)
+        if index_type == "ivfpq":
+            # IVF-PQ uses a directory with numpy binary files
+            dirpath = os.path.join(INDEX_DIR, "ivfpq_index")
+            index.save(dirpath)
+            logger.info("Persisted ivfpq index → %s/", dirpath)
+        else:
+            filepath = os.path.join(INDEX_DIR, f"{index_type}_index.json")
+            index.save(filepath)
+            logger.info("Persisted %s index → %s", index_type, filepath)
 
     def _get_raw_stats(self, index_type: str) -> Dict[str, Any]:
         index = self._indexes[index_type]
-        if index_type == "brute":
+        try:
             return index.get_stats()
-        elif index_type in ("hnsw", "ivf"):
-            try:
-                return index.get_stats()
-            except AttributeError:
-                return {"index_type": index_type}
-        return {}
+        except AttributeError:
+            return {"index_type": index_type}

@@ -58,12 +58,39 @@ serviceAccount:
   annotations: {}
 
 autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 80
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPU: 70
+  targetQPS: 1000
+  # Legacy key kept for backward compat
+  targetCPUUtilizationPercentage: 70
 
 monitoring:
-  enabled: false
+  enabled: true
   serviceMonitor:
-    enabled: false
+    enabled: true
+    interval: 30s
+    path: /metrics
+    port: http
+
+# Spot / preemptible node support
+nodeSelector: {}
+#   cloud.google.com/gke-spot: "true"
+#   eks.amazonaws.com/capacityType: SPOT
+
+tolerations: []
+#   - key: "spot"
+#     operator: "Equal"
+#     value: "true"
+#     effect: "NoSchedule"
+
+spotNodepool:
+  enabled: false
+  nodeSelector:
+    cloud.google.com/gke-spot: "true"
+  tolerations:
+    - key: spot
+      operator: Equal
+      value: "true"
+      effect: NoSchedule

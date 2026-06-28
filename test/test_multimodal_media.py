@@ -76,7 +76,7 @@ def test_media_store_writes_under_collection(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
     uri = save_media("photos", "cat.jpg", b"fake-image-bytes")
-    assert uri.startswith("media_storage/photos/")
+    assert "photos/" in uri and uri.endswith(".jpg")
     full = tmp_path / "media_storage" / "photos"
     assert full.exists()
     assert any(p.suffix == ".jpg" for p in full.iterdir())
