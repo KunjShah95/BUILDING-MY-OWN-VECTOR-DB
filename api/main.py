@@ -137,10 +137,10 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize async database: {e}")
         
     # Initialize cache
-    from services.cache_service import cache_manager
+    from services.cache_service import async_cache_manager as cache_manager
     if getattr(settings, "redis_url", None):
         try:
-            await cache_manager.initialize(settings.redis_url)
+            await cache_manager.init(settings.redis_url)
             logger.info("Async cache initialized")
         except Exception as e:
             logger.error(f"Failed to initialize cache: {e}")
@@ -1469,11 +1469,9 @@ logger.info("Integration API routes integrated")
 # ==================== GraphQL API ====================
 
 try:
-    from strawberry.asgi import GraphQL as GraphQLApp
-    from api.graphql.schema import schema as gql_schema
-    graphql_app = GraphQLApp(gql_schema)
-    app.mount("/graphql", graphql_app)
-    logger.info("GraphQL API mounted at /graphql")
+    from api.graphql_schema import graphql_router as _gql_router
+    app.include_router(_gql_router)
+    logger.info("GraphQL API mounted at /graphql (Strawberry)")
 except Exception as exc:
     logger.warning("GraphQL API unavailable: %s", exc)
 

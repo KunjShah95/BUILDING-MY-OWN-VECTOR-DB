@@ -65,6 +65,7 @@ Loop-maintained. Pass 1 = 2026-06-27.
 ---
 
 ## Synthesis → what to build on top of this DB
+
 1. **Hybrid retrieval** (BM25 sparse + own HNSW dense) fused via **RRF** — production default, +7% NDCG.
 2. **Cross-encoder rerank** top-k — biggest accuracy lift after fusion.
 3. **Query layer**: rewrite + multi-query/HyDE before hitting index.
@@ -123,9 +124,10 @@ external search APIs**. Once we own the crawl + index, third-party SERP/neural A
 redundant. Maps to ROADMAP Phase 17.
 
 ## 0. Core principle
+
 SerpAPI exists only to piggyback Google's index; Exa is neural search over its own crawl.
 With our own crawler + dual index, both collapse into ONE engine. We are not a client of a
-search engine — we *are* the search engine.
+search engine — we _are_ the search engine.
 
 ## 1. High-level architecture
 
@@ -169,6 +171,7 @@ search engine — we *are* the search engine.
 ## 2. Component breakdown
 
 ### 2.1 Crawler (Phase 17.1) — biggest new piece
+
 - **Fetcher**: async `httpx`/`aiohttp`, connection pool, per-host concurrency cap, retry+backoff, timeout.
 - **Politeness**: `robots.txt` parse + cache (`urllib.robotparser`/`reppy`), crawl-delay honored, per-domain rate limit token bucket.
 - **Frontier**: URL queue with priority (depth, domain authority, freshness). BFS default. Persistent (survive restart) — back by Redis or own KV.
@@ -176,23 +179,27 @@ search engine — we *are* the search engine.
 - **Politeness/legal**: respect `noindex`, robots; identifiable User-Agent; opt-out honored.
 
 ### 2.2 Parser / extractor
+
 - HTML → clean main text: `trafilatura` (best boilerplate removal) or `readability-lxml`.
 - Extract: title, meta description, canonical URL, outbound links (feed frontier), lang detect.
 - Optional: PDF/doc extract (already have `pymupdf` in deps).
 
 ### 2.3 Dual index (Phase 17.2)
+
 - **BM25 keyword path** (SerpAPI-style): tokenizer (unicode, lowercase, stopword, stemming), postings lists, term/doc-freq stats. Use embeddable `tantivy` (Rust, fast) OR own impl for full control. Stores doc_id → score.
 - **Neural path** (Exa-style): local embedder `sentence-transformers` (e.g. `bge-base`/`gte`), fully offline. Vectors → existing HNSW/DiskANN core.
 - **Dual write**: each parsed doc → (a) tokenize→postings, (b) embed→ANN insert. Same doc_id keyspace → fusion can join.
 - **Doc store**: doc_id → {url, title, snippet, text, crawl_ts} for result hydration.
 
 ### 2.4 Query pipeline (Phase 17.3)
+
 - **Query understanding**: spell/normalize → rewrite → optional HyDE (embed hypothetical doc) → multi-query expansion (N variants).
 - **Router**: classify intent → keyword-only / neural-only / both. Heuristic first (quoted/exact → keyword; natural lang → neural), ML later.
 - **Fusion**: Reciprocal Rank Fusion `score = Σ 1/(k + rank_i)` (k≈60). Merge BM25 + ANN ranked lists, dedup by doc_id/SimHash.
 - **Rerank**: local cross-encoder `ms-marco-MiniLM-L6-v2` over top-K (≈50-100). ONNX/quantized for speed. Ties to Phase 15 ColBERT/LTR.
 
 ### 2.5 Serving (Phase 17.4)
+
 - Query API (FastAPI — already in stack): `/search?q=&mode=&k=`.
 - Result cache (hot queries) — TTL + invalidate on recrawl.
 - Recrawl scheduler: freshness score per doc → re-fetch stale.
@@ -228,6 +235,7 @@ search_engine/
 ```
 
 ## 4. Tech stack (all local, no paid API)
+
 | Layer | Choice | Note |
 |-------|--------|------|
 | Crawl | `httpx` async + `selectolax` | fast parse |
@@ -241,6 +249,7 @@ search_engine/
 | Eval | BEIR, custom golden set | |
 
 ## 5. Build milestones (incremental, each shippable)
+
 - **M1 — Vertical slice**: crawl 1 seed domain → extract → embed → ANN only → neural search API. Proves end-to-end.
 - **M2 — Keyword path**: add BM25 inverted index + dual write. Keyword search works standalone.
 - **M3 — Hybrid**: RRF fusion of both paths + dedup. Measure NDCG lift.
@@ -250,12 +259,14 @@ search_engine/
 - **M7 — Eval & tune**: BEIR harness, golden sets, tune BM25 params / ANN ef / RRF k / rerank depth.
 
 ## 6. Honest constraints
+
 - **Coverage**: matching Google needs web-scale crawl (billions → ROADMAP Phase 10). For vertical/niche search (docs, domain), solo-buildable now.
 - **Cost shift**: no API $, but you own crawl infra + storage + compute. Tradeoff = control + no per-query fee.
 - **Legal/ethical**: honor robots.txt, rate limits, copyright, opt-out. Identifiable UA.
 - **Freshness**: own crawl = staleness risk; recrawl scheduler mandatory for fresh results.
 
 ## 7. Open decisions (resolve before M1)
+
 - BM25: build own vs `tantivy` binding?
 - Embedder model: bge-base vs gte vs e5 (recall vs latency).
 - Frontier backing store: Redis vs own KV vs SQLite.
@@ -283,6 +294,7 @@ route + a search UI on the existing React frontend.
 ## 9. The five access modes
 
 ### 9.1 Web search UI (humans) — extend existing React `frontend/`
+
 - Google/Exa-style: search box → results page (title, URL, snippet, favicon).
 - Controls: mode toggle (neural / keyword / hybrid), filters (domain, date, lang), pagination/infinite scroll.
 - Autocomplete (prefix on BM25 terms), "did you mean", instant results.
@@ -290,6 +302,7 @@ route + a search UI on the existing React frontend.
 - Streaming results via existing WebSocket (`ws_search.py`) — show fast keyword hits, stream reranked.
 
 ### 9.2 REST/GraphQL/gRPC API (developers) — extend existing `api/`
+
 - New route `GET/POST /api/search` in a `search_engine` router (sibling to `search_enhanced.py`).
   - params: `q`, `mode` (neural|keyword|hybrid), `k`, `filters`, `rerank` (bool), `page`.
   - returns: ranked `[{doc_id, url, title, snippet, score, source}]` + timing/debug.
@@ -298,31 +311,37 @@ route + a search UI on the existing React frontend.
 - WebSocket `ws_search.py` for streaming/live-as-you-type.
 
 ### 9.3 SDKs (developers, 6 langs) — extend existing `sdk/`
+
 - Add `search()` method to each client (Py/TS/Go/Java/Rust/.NET), mirroring REST.
 - Python: also a LangChain `Retriever` (already have `langchain_vectorstore.py`) so it drops into any RAG chain.
 - Example: `client.search("query", mode="hybrid", k=10)`.
 
 ### 9.4 AI-agent / LLM access — search-as-a-tool
+
 - **MCP server**: expose `web_search(query, k)` tool so Claude/agents call it directly. Highest-leverage for the agent era.
 - **OpenAI-compat** (`openai_compat.py` already exists): wire search into the RAG/completions flow so any OpenAI-SDK app gets grounded answers.
 - **RAG endpoint** (`rag.py`): search → retrieve → stuff context → LLM answer + citations. This is the "answer engine" (Perplexity-style) layer on top of raw search.
 
 ### 9.5 CLI + embeddable
+
 - CLI: `vdb search "query" --mode hybrid -k 10` for scripts/data users.
 - JS widget: `<script>` drop-in search box → calls REST. Browser extension for "search my index from anywhere".
 
 ## 10. Two product shapes (same engine, different output)
+
 - **Search engine**: returns ranked links + snippets (Exa/Google shape). Surfaces 9.1-9.3.
 - **Answer engine**: search → rerank → LLM synthesizes answer with citations (Perplexity shape). Surface 9.4 (`rag.py`).
 Both share the retrieval core; answer engine = search engine + generation step.
 
 ## 11. Cross-cutting (apply to all surfaces)
+
 - **Auth/tenancy**: reuse existing `auth_middleware.py` + `tenants.py` — API keys, per-tenant indexes, rate limits.
 - **Caching**: existing `query_cache.py` for hot queries.
 - **Observability**: existing `monitoring.py` + `dashboard.py` — QPS, latency, recall, click-through.
 - **Feedback loop**: log clicks/skips → learning-to-rank (ROADMAP Phase 15 RLHF).
 
 ## 12. Minimal user-facing MVP (after engine M1-M3)
+
 1. `GET /api/search?q=&mode=hybrid&k=10` → JSON results.
 2. Search box + results page on existing React frontend.
 3. `client.search()` in Python + TS SDK.

@@ -32,24 +32,26 @@ Hot-loadable custom index algorithms, encoders, and storage backends.
 
 ## Phase 14: Intelligent Query Mesh ✅
 Self-optimizing query routing and cost governance.
-- ⚪ Query cost predictor (estimated scan count before execution)
-- ⚪ Budget-aware query scheduler with tenant credit pools
-- ⚪ Cross-index fusion with real-time latency/recall telemetry
-- ⚪ Materialized view auto-recommendation engine
+- ✅ Query cost predictor — per-index formula (HNSW/IVF/PQ/BruteForce), calibration from actuals — `services/query_cost_predictor.py`
+- ✅ Budget-aware query scheduler with tenant credit pools — token-bucket `TenantCreditPool`, priority queue — `services/query_scheduler.py`
+- ✅ Cross-index fusion with real-time latency/recall telemetry — RRF + per-index p50/p95 — `services/fusion_telemetry.py`
+- ✅ Materialized view auto-recommendation engine — cosine clustering at 0.95 threshold — `services/view_recommender.py`
+- ✅ Query mesh API — `/api/query/cost-estimate`, `/api/query/fused-search`, `/api/query/fusion-telemetry`, `/api/query/view-recommendations` — `api/routers/query_mesh.py`
 
 ## Phase 15: Vector-Native AI Features ✅
 Differentiated AI capabilities beyond basic ANN search.
-- ⚪ Fine-tuning interface for ranking models (LTR/ColBERT)
-- ⚪ RLHF feedback loop from user click/skip signals
-- ⚪ On-device embedding with federated update sync
-- ⚪ Vector explanation (why this result?) via attention attribution
+- ✅ LTR fine-tuning interface — pointwise ridge + MLP, pairwise RankNet, NDCG@10/MRR eval — `services/ltr_trainer.py`
+- ✅ RLHF feedback loop — click/skip/dwell signals, Bradley-Terry reward model — `services/rlhf_service.py`
+- ✅ Federated embedding sync — per-class centroids, FedAvg aggregation, global version bumping — `services/federated_embedding.py`
+- ✅ Vector explanation — top-k dimension attribution, natural language summary — `services/vector_explainer.py`
+- ✅ AI features API — `/api/ltr/*`, `/api/rlhf/*`, `/api/explain/*`, `/api/federated/*` — `api/routers/ai_features.py`
 
 ## Phase 16: Managed Cloud Platform ✅
 Self-service deployment, monitoring, and billing.
-- ⚪ Helm chart auto-scaling with spot/preemptible nodes
-- ⚪ Usage metering and per-tenant billing API
-- ⚪ Web admin console with query analyzer and cost explorer
-- ⚪ One-click restore from backup with point-in-time recovery
+- ✅ Helm HPA + PDB + ServiceMonitor + spot node pool — `helm/vector-db/`
+- ✅ Usage metering + per-tenant billing API — search/insert/build pricing, CSV export — `services/billing_service.py`, `api/routers/billing.py`
+- ✅ Web admin console — query analyzer, cost explorer, vacuum — `api/routers/admin_console.py`
+- ✅ Point-in-time recovery — shutil snapshot, SHA-256 verify, schedule, restore — `services/pitr_service.py`, `api/routers/pitr.py`
 
 ## Phase 17: Self-Hosted Web Search Engine ✅
 Full search engine on top of the vector DB — Exa-style (neural) + SerpAPI-style (keyword) capabilities, entirely self-hosted with zero external search APIs. Once we own the index, third-party SERP/neural-search APIs become redundant. Code lives in `search_engine/`; API in `api/routers/web_search.py`.
@@ -85,7 +87,36 @@ Full search engine on top of the vector DB — Exa-style (neural) + SerpAPI-styl
 - ✅ Tab selector: All / Neural / Keyword
 - ✅ `/search` route added to `main.tsx` via `react-router-dom`; "Search" link in landing nav
 
-**Tests:** `search_engine/tests/` — 18 passing (all green).
-**Bonus fix:** repaired pre-existing `lifespan` NameError in `api/main.py` that made the whole API unimportable.
+**Tests:** `search_engine/tests/` — 50 passing (18 original + 32 new).
+
+### 17.6 Completion additions ✅
+- ✅ `GET /api/web/answer` — extractive answer synthesis from top-5 snippets, query-term sentence scoring, citations
+- ✅ `GET /api/web/search/highlighted` — search with `**term**` bolding in snippets
+- ✅ `POST /api/web/feed` — RSS 2.0 / Atom 1.0 feed ingestion exposing `search_engine/crawler/feed.py`
+- ✅ `POST /api/web/sitemap` — sitemap.xml URL discovery + crawl via `search_engine/crawler/sitemap.py`
+- ✅ `GET /api/web/collections` + `DELETE /api/web/collections/{id}` — list and purge indexed collections
+- ✅ `POST /api/web/splade/encode` + `POST /api/web/splade/search` — SPLADE sparse search endpoints
+- ✅ `utils/splade_index.py` — BM42-style sparse encoder: IDF-only query side, BM25 doc side, JSON persistence
 
 **Phase 17 status: ✅ Complete**
+
+## Phase 18: GraphQL API ✅
+Typed GraphQL interface alongside the existing REST API, using Strawberry. Mounted at `/graphql` with interactive GraphiQL playground at `/graphql`.
+
+- ✅ `Query.search(query, collectionId, topK, mode)` — hybrid/neural/keyword search returning `[SearchResult]`
+- ✅ `Query.collections()` — list all indexed collections with doc count and sparse-index presence
+- ✅ `Query.vectorInfo(vectorId, collectionId)` — metadata + dimension for a specific vector
+- ✅ `Query.indexStats(collectionId)` — index type list + cache entry count
+- ✅ `Query.webSearch(query, k, collectionId)` — neural+keyword web search returning `WebSearchResponse`
+- ✅ `Mutation.insertVector(collectionId, vectorId, vector, metadata)` — insert/update a vector
+- ✅ `Mutation.deleteVector(vectorId, collectionId)` — remove a vector
+- ✅ `Mutation.crawlUrl(seeds, collectionId, maxPages)` — fire-and-forget crawl job
+- ✅ Schema file: `api/graphql_schema.py` — Strawberry schema + `GraphQLRouter` mounted in `api/main.py`
+- ✅ 24 tests: `test/test_graphql.py` — schema introspection, type helpers, resolver mocking, mutation round-trips
+
+**Bug fixes delivered alongside Phase 18:**
+- Fixed `api/main.py` lifespan: `cache_manager` → `async_cache_manager`, `.initialize()` → `.init()` (ImportError)
+- Fixed `test/test_startup_recovery.py`: added `wal.flush()` calls so buffer lands on disk before detection (race condition)
+- Fixed `test/test_multimodal_media.py`: URI assertion used `startswith("media_storage/")` but env var set absolute path
+
+**Phase 18 status: ✅ Complete**

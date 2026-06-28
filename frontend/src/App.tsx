@@ -140,6 +140,9 @@ export default function App() {
                 <a href="/search" className="hover:text-gray-300 transition-colors flex items-center gap-1.5">
                   <Search className="size-3.5" /> Search
                 </a>
+                <a href="/rag" className="hover:text-gray-300 transition-colors flex items-center gap-1.5">
+                  <Brain className="size-3.5" /> RAG
+                </a>
                 <a href="https://github.com/KunjShah95/BUILDING-MY-OWN-VECTOR-DB" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors flex items-center gap-1.5">
                   <GitForkIcon className="size-3.5" /> GitHub
                 </a>
